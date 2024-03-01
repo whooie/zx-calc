@@ -201,6 +201,11 @@ impl KetBra {
         }
     }
 
+    /// If `self` is empty then return the amplitude as a single scalar.
+    pub fn as_scalar(&self) -> Option<C64> {
+        (self.ket.is_empty() && self.bra.is_empty()).then_some(self.ampl)
+    }
+
     /// Express `self` in `basis`.
     ///
     /// This returns an [`Element`] because conversion to a different basis
@@ -631,6 +636,14 @@ impl Element {
             .then_some(())
             .ok_or(KBError::ElementBraSameKeys)?;
         Ok(Self { terms: ketbras }.simplified())
+    }
+
+    /// If `self` contains only one term with an empty ket and bra, extract its
+    /// amplitude as a single scalar.
+    pub fn as_scalar(&self) -> Option<C64> {
+        (self.terms.len() == 1)
+            .then(|| self.terms[0].as_scalar())
+            .flatten()
     }
 
     fn collect_unchecked<I>(ketbras: I) -> Self
@@ -1242,9 +1255,9 @@ impl fmt::Display for Diagram {
         if !outs.is_empty() {
             let mut outs: Vec<usize> = outs.into_iter().collect();
             outs.sort();
-            writeln!(f, "outs: {:?}", outs)?;
+            write!(f, "outs: {:?}", outs)?;
         } else {
-            writeln!(f, "outs: [ ]")?;
+            write!(f, "outs: [ ]")?;
         }
         Ok(())
     }

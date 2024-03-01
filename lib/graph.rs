@@ -5,7 +5,7 @@
 //! attached to its nodes.
 
 use std::{
-    collections::{ HashMap, HashSet },
+    collections::{ HashMap, HashSet, VecDeque },
     f64::consts::{ PI, FRAC_PI_2 as PI2, TAU },
     fs,
     io::Write,
@@ -15,6 +15,7 @@ use std::{
 use num_complex::Complex64 as C64;
 use num_rational::Rational64 as R64;
 use thiserror::Error;
+use crate::ketbra;
 
 #[derive(Debug, Error)]
 pub enum GraphError {
@@ -101,6 +102,20 @@ impl From<Node> for NodeDef {
 }
 
 impl Node {
+    fn as_element<I, J>(&self, ins: I, outs: J) -> ketbra::Element
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        match self {
+            Self::Z(ph) => ketbra::Element::Z(ins, outs, Some(*ph)),
+            Self::X(ph) => ketbra::Element::X(ins, outs, Some(*ph)),
+            Self::H(a) => ketbra::Element::H(ins, outs, Some(*a)),
+            Self::Input(_) => ketbra::Element::zero(),
+            Self::Output(_) => ketbra::Element::zero(),
+        }
+    }
+
     /// Convert `self` to a [`NodeDef`], discarding qubit IDs from `Input` and
     /// `Output`.
     pub fn as_def(&self) -> NodeDef {
@@ -603,8 +618,8 @@ struct HBiAlgebra(Vec<NodeId>, Vec<NodeId>);
 /// An X-spider of arity 2 and phase π connected to a phaseless Z-spider of
 /// arity 3 over two wires, each with an H-box of arbitrary argument.
 #[derive(Copy, Clone, Debug)]
-struct HStateAvg(NodeId, NodeId, NodeId, NodeId);
-//     HStateAvg(pi x-spider, hbox1, hbox2, z-spider)
+struct HAvg(NodeId, NodeId, NodeId, NodeId);
+//     HAvg(pi x-spider, hbox1, hbox2, z-spider)
 
 /// Two phaseless Z-spiders of arbitrary arities connected to each other by an
 /// arbitrary number of wires, each with an H-box of arbitrary argument.
@@ -2307,7 +2322,7 @@ impl Diagram {
         }
     }
 
-    fn find_hstate_avg(&self) -> Option<HStateAvg> {
+    fn find_havg(&self) -> Option<HAvg> {
         let n0 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
             n.is_x_and(|ph| phase_eq(ph, PI))
                 && dg.arity(*id).unwrap() == 2
@@ -2325,12 +2340,12 @@ impl Diagram {
                 && dg.mutual_arity(*id, p[0].0).unwrap() == 1
         };
         self.find_path(self.nodes_inner(), &[n0, n1, n2, n3], Vec::new())
-            .map(|p| HStateAvg(p[0].0, p[1].0, p[3].0, p[2].0))
+            .map(|p| HAvg(p[0].0, p[1].0, p[3].0, p[2].0))
     }
 
     /// Simplify by applying the averaging rule.
-    pub fn simplify_hstate_avg(&mut self) -> bool {
-        if let Some(HStateAvg(x, h1, h2, z)) = self.find_hstate_avg() {
+    pub fn simplify_havg(&mut self) -> bool {
+        if let Some(HAvg(x, h1, h2, z)) = self.find_havg() {
             let neighbor: NodeId
                 = self.neighbors_of(z).unwrap()
                 .filter_map(|(id, _)| (id != h1 && id != h2).then_some(id))
@@ -2454,6 +2469,149 @@ impl Diagram {
     /// simplifications can be made.
     pub fn simplify(&mut self) { todo!() }
 
+    fn find_scalar_nodes(&self) -> HashMap<NodeId, Node> {
+        // a node is part of a scalar subgraph if there is no path from it to
+        // any Input or Output node
+        //
+        // all scalar subgraphs are found by starting with the set of all nodes
+        // and removing all nodes seen by BFS explorations starting at each of
+        // the Input and Output nodes; everything that's left is part of a
+        // scalar subgraph
+        //
+        // the returned value may contain multiple disconnected scalar subgraphs
+
+        let mut nodes: HashMap<NodeId, Node> = self.nodes.clone();
+        let mut to_visit: VecDeque<NodeId>;
+        for (io, _) in self.inputs().chain(self.outputs()) {
+            to_visit = vec![io].into();
+            while let Some(id) = to_visit.pop_back() {
+                for (id2, _) in self.neighbors_of(id).unwrap() {
+                    if nodes.contains_key(&id2) {
+                        to_visit.push_front(id2);
+                    }
+                }
+                nodes.remove(&id);
+            }
+        }
+        nodes
+    }
+
+    fn compute_scalar(&self, nodes: &HashMap<NodeId, Node>) -> C64 {
+        // compute the value of the scalar by converting the subgraph found by
+        // `find_scalar_nodes` to a ketbra diagram and contracting
+        //
+        // if `find_scalar_nodes` did its job right, the result of the
+        // contraction is guaranteed to be an Element of a single term with no
+        // inputs or outputs, the amplitude of which is the scalar
+        //
+        // conversion to a ketbra diagram is done by iterating over nodes and
+        // analyzing input/output wires relative to what's already been seen
+        //
+        // this subgraph can be deformed arbitrarily, so no need to care about
+        // the order of iteration
+
+        let mut elements: Vec<ketbra::Element>
+            = Vec::with_capacity(nodes.len());
+        let mut visited: HashSet<NodeId>
+            = HashSet::with_capacity(nodes.len());
+        for (&id, node) in nodes.iter() {
+            visited.insert(id);
+            let ins
+                = self.neighbors_of(id).unwrap()
+                .filter_map(|(id2, _)| visited.contains(&id2).then_some(id2))
+                .flat_map(|id2| self.wires_between(id, id2).unwrap())
+                .map(|wire_id| wire_id.0);
+            let outs
+                = self.neighbors_of(id).unwrap()
+                .filter_map(|(id2, _)| (!visited.contains(&id2)).then_some(id2))
+                .flat_map(|id2| self.wires_between(id, id2).unwrap())
+                .map(|wire_id| wire_id.0);
+            elements.push(node.as_element(ins, outs));
+        }
+        ketbra::Diagram::new(elements)
+            .contract().unwrap()
+            .as_scalar().unwrap_or(0.0.into())
+    }
+
+    /// Compute and remove all scalars from `self`, returning the result.
+    pub fn remove_scalars(&mut self) -> C64 {
+        let nodes = self.find_scalar_nodes();
+        let scalar = self.compute_scalar(&nodes);
+        nodes.into_iter()
+            .for_each(|(id, _)| { self.remove_node(id); });
+        scalar
+    }
+
+    /// Convert `self` to a [`ketbra::Diagram`] representation.
+    pub fn as_ketbra(&self) -> ketbra::Diagram {
+        // assemble the ketbra diagram by iterating over nodes and analyzing
+        // input/output wires relative to what's already been seen
+        //
+        // have to BFS explore starting from the input nodes in order to ensure
+        // that input-adjacent nodes are placed first in the ketbra diagram
+        //
+        // we also want to have wire numbers in the ketbra diagram line up with
+        // qubit indices for convenience, so if a given wire id (normally used
+        // as-is for a ketbra wire index) coincides with a possible qubit index
+        // (bounded from above by max{input_counter, output_counter}), shift it
+        // by the maximum wire id in the (graph) diagram
+
+        let qcount = self.input_counter.max(self.output_counter);
+        let nonq_wire = |id: usize| -> usize {
+            if id < qcount { self.edge_id + id } else { id }
+        };
+        let mut elements: Vec<ketbra::Element>
+            = Vec::with_capacity(self.nodes_inner().count());
+        let mut visited: HashSet<NodeId>
+            = HashSet::with_capacity(self.nodes_inner().count());
+        let mut to_visit: VecDeque<(NodeId, Node)> = self.inputs().collect();
+        let mut ins: Vec<usize>;
+        let mut outs: Vec<usize>;
+        while let Some((id, node)) = to_visit.pop_back() {
+            visited.insert(id);
+
+            ins = Vec::new();
+            outs = Vec::new();
+            for (id2, node2) in self.neighbors_of(id).unwrap() {
+                if
+                    !visited.contains(&id2)
+                        && !to_visit.contains(&(id2, node2))
+                {
+                    to_visit.push_front((id2, node2));
+                }
+                if !node.is_generator() { break; }
+                if
+                    node2.is_input()
+                        || (!node2.is_output() && visited.contains(&id2))
+                {
+                    if let Node::Input(qid) = node2 {
+                        ins.push(qid.0);
+                    } else {
+                        for wid in self.wires_between(id, id2).unwrap() {
+                            ins.push(nonq_wire(wid.0));
+                        }
+                    }
+                } else if
+                    node2.is_output()
+                        || (!node2.is_input() && !visited.contains(&id2))
+                {
+                    if let Node::Output(qid) = node2 {
+                        outs.push(qid.0);
+                    } else {
+                        for wid in self.wires_between(id, id2).unwrap() {
+                            outs.push(nonq_wire(wid.0));
+                        }
+                    }
+                }
+            }
+
+            if node.is_generator() {
+                elements.push(node.as_element(ins, outs));
+            }
+        }
+        ketbra::Diagram::new(elements)
+    }
+
     /// Return an object containing an encoding of `self` in the [dot
     /// language][dot-lang].
     ///
@@ -2492,7 +2650,7 @@ impl Diagram {
             = StmtList::new()
             .add_attr(
                 AttrType::Graph,
-                AttrList::new().add_pair(rank(RankType::Min)),
+                AttrList::new().add_pair(rank(RankType::Source)),
             );
         let mut inputs: Vec<(NodeId, Node)> = self.inputs().collect();
         inputs.sort_by(|(l, _), (r, _)| l.cmp(r));
@@ -2530,7 +2688,7 @@ impl Diagram {
             = StmtList::new()
             .add_attr(
                 AttrType::Graph,
-                AttrList::new().add_pair(rank(RankType::Max)),
+                AttrList::new().add_pair(rank(RankType::Sink)),
             );
         let mut outputs: Vec<(NodeId, Node)> = self.outputs().collect();
         outputs.sort_by(|(l, _), (r, _)| l.cmp(r));
