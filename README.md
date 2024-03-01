@@ -5,6 +5,54 @@
 Contains tools for working in the ZX-calculus, a diagrammatic language for
 reasoning about linear maps between two-level quantum states.
 
+## Features
+- Multiple diagram representations
+    - [x] Ranked, tensorless ket-bra forms
+    - [x] Graph-based forms
+    - [ ] Render to graphviz (partial: graph only)
+    - [ ] Conversion between representations (partial: graph -> ketbra)
+- Diagram simplification (graph-based only)
+    - [ ] ZX rewrite rules
+        - [x] Z/X/HH identity removal
+        - [x] Spider fusion
+        - [x] Hopf rule
+        - [x] "H2-Hopf" rule (identical colors with intervening H-boxes)
+        - [x] Spider color change
+        - [x] Remove self-loops with single H-boxes
+        - [x] "i-H-i sandwich" (Euler-angle expansion of an H-box between two
+          π/2 spiders)
+        - [x] Color-change and fuse for Z-H-X sandwiches
+        - [x] π-commute and fuse for Z-X-Z/X-Z-X sandwiches
+        - [x] Heuristic-based general reduction of H-boxes via color change
+        - [x] Heuristic-based general reduction of π-spiders via π-commute
+        - [ ] Bialgebra rule (partial: 2x2 case with nπ phases)
+        - [x] State/effect copying
+    - [ ] ZH rewrite rules
+        - [x] H-box fusion
+        - [x] π-state/effect absorption
+        - [x] State/effect explosion through an H-box
+        - [x] H-state/effect conversion to Z-state/effect
+        - [x] π Z-state/effect copying through H-boxes
+        - [x] State/effect expansion of H-boxes with label 1
+        - [x] H-box version of the Hopf rule
+        - [ ] H-box version of the bialgebra rule
+        - [x] H-box averaging rule
+        - [x] H-state multiplication rule
+        - [ ] Generalized H-box multiplication rule
+        - [x] H-box wire introduction rule (reversed)
+    - [ ] Single, exhaustive "simplify"
+    - [x] Scalar computation and removal
+    - [ ] Equality testing via simplification
+- Diagram evaluation
+    - [x] Scalar computation
+    - [x] Unitary evaluation (based on conversion to ketbra form)
+- Circuits
+    - [ ] Basic ranked circuit representation
+    - [ ] Read/write OpenQASM
+    - [ ] Render to Graphviz
+    - [ ] Conversion to diagram representations
+    - [ ] Circuit extraction from diagrams
+
 ## Helpful resources
 * B. Coecke, "Basic ZX-calculus for students and professionals."
   [arXiv:2303.03163](https://arxiv.org/abs/2303.03163)
