@@ -3,11 +3,6 @@
 //!
 //! You will most likely only want to deal directly with [`Element`] and
 //! [`Diagram`].
-//!
-//! See \[[1][pennylane]\] and \[[2][arxiv]\] for more info.
-//!
-//! [pennylane]: https://pennylane.ai/qml/demos/tutorial_zx_calculus
-//! [arxiv]: https://arxiv.org/abs/2012.13966
 
 use std::{
     cmp::Ordering,
@@ -814,13 +809,11 @@ impl Element {
                     .map(|idx| [(idx, Zero), (idx, One)])
                     .multi_cartesian_product()
                     .map(|ins| {
-                        println!("{:?}", ins);
                         let ampl: C64
                             = ins.iter()
                             .any(|(_, s)| *s == Zero)
                             .then_some(c!(1.0))
                             .unwrap_or(a);
-                        println!("{}", ampl);
                         KetBra::new(ampl, [], ins)
                     })
                 .collect()
@@ -1050,10 +1043,6 @@ impl Element {
     ///
     /// Ratios and relative phases between amplitudes are preserved.
     pub fn normalized(mut self) -> Self { self.normalize(); self }
-
-    // pub fn to_matrix(&self, basis: Basis) -> nd::Array2<C64> {
-    //     todo!()
-    // }
 }
 
 impl fmt::Display for Element {
