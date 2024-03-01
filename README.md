@@ -18,4 +18,6 @@ reasoning about linear maps between two-level quantum states.
 ## See also
 * [PyZX](https://github.com/Quantomatic/pyzx): a Python implementation of the
   ZX-calculus and its rewrite rules
+* [QuiZX](https://github.com/Quantomatic/quizx/tree/master): a Rust
+  implementation of the above.
 
