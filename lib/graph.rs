@@ -2477,14 +2477,19 @@ impl Diagram {
     /// simplifications can be made.
     pub fn simplify(&mut self) { todo!() }
 
-    fn find_scalar_nodes(&self) -> HashMap<NodeId, Node> {
+    /// Find all nodes that are part of a scalar subgraph.
+    ///
+    /// A node is part of a scalar subgraph if there is no path from it to any
+    /// `Input` or `Output` node. Note that the returned nodes may comprise more
+    /// than one scalar.
+    pub fn find_scalar_nodes(&self) -> HashMap<NodeId, Node> {
         // a node is part of a scalar subgraph if there is no path from it to
         // any Input or Output node
         //
         // all scalar subgraphs are found by starting with the set of all nodes
-        // and removing all nodes seen by BFS explorations starting at each of
-        // the Input and Output nodes; everything that's left is part of a
-        // scalar subgraph
+        // and removing those seen by BFS explorations starting at each of the
+        // Input and Output nodes; everything that's left is part of a scalar
+        // subgraph
         //
         // the returned value may contain multiple disconnected scalar subgraphs
 
@@ -2564,18 +2569,44 @@ impl Diagram {
             }
         }
 
-        ketbra::Diagram::new(elements)
-            .contract().unwrap_or_else(|_| unreachable!())
-            .as_scalar().unwrap_or_else(|| unreachable!())
+        if elements.is_empty() {
+            C64::new(1.0, 0.0)
+        } else {
+            ketbra::Diagram::new(elements)
+                .contract().unwrap_or_else(|_| unreachable!())
+                .as_scalar().unwrap_or_else(|| unreachable!())
+        }
     }
 
-    /// Compute and remove all scalars from `self`, returning the result.
+    /// Find all nodes that are part of a scalar subgraph and compute their
+    /// total product.
+    ///
+    /// See also [`find_scalar_nodes`][Self::find_scalar_nodes].
+    pub fn get_scalar(&self) -> C64 {
+        let nodes = self.find_scalar_nodes();
+        self.compute_scalar(&nodes)
+    }
+
+    /// Find, compute, and remove all scalars from `self`, returning their total
+    /// product.
+    ///
+    /// See also [`find_scalar_nodes`][Self::find_scalar_nodes] and
+    /// [`remove_scalar_nodes`][Self::remove_scalar_nodes].
     pub fn remove_scalars(&mut self) -> C64 {
         let nodes = self.find_scalar_nodes();
         let scalar = self.compute_scalar(&nodes);
-        nodes.into_iter()
-            .for_each(|(id, _)| { self.remove_node(id); });
+        nodes.into_iter().for_each(|(id, _)| { self.remove_node(id); });
         scalar
+    }
+
+    /// Like [`remove_scalars`][Self::remove_scalars], but do not actually
+    /// compute any scalar values, only remove their nodes.
+    ///
+    /// See also [`find_scalar_nodes`][Self::find_scalar_nodes].
+    pub fn remove_scalar_nodes(&mut self) {
+        self.find_scalar_nodes()
+            .into_iter()
+            .for_each(|(id, _)| { self.remove_node(id); });
     }
 
     /// Convert `self` to a [`ketbra::Diagram`] representation.
