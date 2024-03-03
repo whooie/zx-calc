@@ -9,8 +9,12 @@ reasoning about linear maps between two-level quantum states.
 - Multiple diagram representations
     - [x] Ranked, tensorless ket-bra forms
     - [x] Graph-based forms
-    - [ ] Render to graphviz (partial: graph only)
-    - [ ] Conversion between representations (partial: graph -> ketbra)
+    - [x] Render to graphviz
+    - [x] Conversion between representations
+- Diagram tools
+    - [x] Scalar computation
+    - [x] Evaluation (based on conversion to ketbra form)
+    - [ ] Diagram composition/tensoring
 - Diagram simplification (graph-based only)
     - [ ] ZX rewrite rules
         - [x] Z/X/HH identity removal
@@ -43,9 +47,6 @@ reasoning about linear maps between two-level quantum states.
     - [ ] Single, exhaustive "simplify"
     - [x] Scalar computation and removal
     - [ ] Equality testing via simplification
-- Diagram evaluation
-    - [x] Scalar computation
-    - [x] Unitary evaluation (based on conversion to ketbra form)
 - Circuits
     - [ ] Basic ranked circuit representation
     - [ ] Read/write OpenQASM

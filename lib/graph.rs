@@ -373,13 +373,13 @@ macro_rules! isomorphism {
 const EPSILON: f64 = 1e-15;
 
 /// Returns `true` if `ph1` and `ph2` are equal up to [`EPSILON`], modulo 2π.
-fn phase_eq(ph1: f64, ph2: f64) -> bool {
+pub(crate) fn phase_eq(ph1: f64, ph2: f64) -> bool {
     (ph1 - ph2).rem_euclid(TAU).abs() < EPSILON
 }
 
 /// Return a string representation `ph`, reduced modulo π and with the π divided
 /// out.
-fn format_phase(ph: f64) -> String {
+pub(crate) fn format_phase(ph: f64) -> String {
     let ph = ph % TAU;
     if phase_eq(ph, 0.0) {
         "".to_string()
@@ -1004,6 +1004,8 @@ impl Diagram {
     ///
     /// Fails if the given node IDs do not exist, are not input/outputs or have
     /// arity 0.
+    ///
+    /// *Panics if `a` and `b` are equal.*
     pub fn apply_bell<A, B>(&mut self, a: A, b: B, phase: Option<Spider>)
         -> GraphResult<Option<NodeId>>
     where
@@ -1012,6 +1014,12 @@ impl Diagram {
     {
         let a = a.into();
         let b = b.into();
+        if a == b {
+            panic!(
+                "Diagram::apply_bell: \
+                cannot apply both connections to the same node"
+            );
+        }
         self.nodes.get(&a)
             .and_then(|na| self.nodes.get(&b).map(|nb| (na, nb)))
             .is_some_and(|(na, nb)| {
@@ -2509,28 +2517,56 @@ impl Diagram {
         //
         // this subgraph can be deformed arbitrarily, so no need to care about
         // the order of iteration
+        //
+        // self-wires are dealt with by adding two extra outgoing wires
+        // immediately coupled to a spiderless Bell effect
 
         let mut elements: Vec<ketbra::Element>
             = Vec::with_capacity(nodes.len());
         let mut visited: HashSet<NodeId>
             = HashSet::with_capacity(nodes.len());
+        let qcount = self.input_counter.max(self.output_counter);
+        let mut bell_wire = self.edge_id + qcount + 1..;
+        let mut ins: Vec<usize>;
+        let mut outs: Vec<usize>;
+        let mut bell_wires: Vec<(usize, usize)>;
         for (&id, node) in nodes.iter() {
             visited.insert(id);
-            let ins
-                = self.neighbors_of(id).unwrap()
-                .filter_map(|(id2, _)| visited.contains(&id2).then_some(id2))
-                .flat_map(|id2| self.wires_between(id, id2).unwrap())
-                .map(|wire_id| wire_id.0);
-            let outs
-                = self.neighbors_of(id).unwrap()
-                .filter_map(|(id2, _)| (!visited.contains(&id2)).then_some(id2))
-                .flat_map(|id2| self.wires_between(id, id2).unwrap())
-                .map(|wire_id| wire_id.0);
+
+            ins = Vec::new();
+            outs = Vec::new();
+            bell_wires = Vec::new();
+            for (id2, _) in self.neighbors_of(id).unwrap() {
+                if id2 == id {
+                    let b1 = bell_wire.next().unwrap();
+                    let b2 = bell_wire.next().unwrap();
+                    outs.push(b1);
+                    outs.push(b2);
+                    bell_wires.push((b1, b2));
+                    continue;
+                }
+                if visited.contains(&id2) {
+                    for wid in self.wires_between(id, id2).unwrap() {
+                        ins.push(wid.0);
+                    }
+                } else {
+                    for wid in self.wires_between(id, id2).unwrap() {
+                        outs.push(wid.0);
+                    }
+                }
+            }
+
             elements.push(node.as_element(ins, outs));
+            if !bell_wires.is_empty() {
+                for (b1, b2) in bell_wires.into_iter() {
+                    elements.push(ketbra::Element::cap([b1, b2], None));
+                }
+            }
         }
+
         ketbra::Diagram::new(elements)
-            .contract().unwrap()
-            .as_scalar().unwrap_or(0.0.into())
+            .contract().unwrap_or_else(|_| unreachable!())
+            .as_scalar().unwrap_or_else(|| unreachable!())
     }
 
     /// Compute and remove all scalars from `self`, returning the result.
@@ -2555,60 +2591,136 @@ impl Diagram {
         // as-is for a ketbra wire index) coincides with a possible qubit index
         // (bounded from above by max{input_counter, output_counter}), shift it
         // by the maximum wire id in the (graph) diagram
+        //
+        // do this in two steps because nodes with paths to inputs/outputs need
+        // to be visited in a special order, but everything else (i.e. part of a
+        // scalar) doesn't
+        //
+        // self-wires are dealt with by adding two extra outgoing wires
+        // immediately coupled to a spiderless Bell effect
 
-        let qcount = self.input_counter.max(self.output_counter);
-        let nonq_wire = |id: usize| -> usize {
-            if id < qcount { self.edge_id + id } else { id }
-        };
+        fn as_ketbra_inner(
+            dg: &Diagram,
+            visited: &mut HashSet<NodeId>,
+            to_visit: &mut VecDeque<(NodeId, Node)>,
+            elements: &mut Vec<ketbra::Element>,
+        ) {
+            let qcount = dg.input_counter.max(dg.output_counter);
+            let nonq_wire = |id: usize| -> usize {
+                if id < qcount { dg.edge_id + id } else { id }
+            };
+            let mut bell_wire = dg.edge_id + qcount + 1..;
+            let mut ins: Vec<usize>;
+            let mut outs: Vec<usize>;
+            let mut bell_wires: Vec<(usize, usize)>;
+            let mut empty_wires: Vec<(QubitId, QubitId)> = Vec::new();
+            while let Some((id, node)) = to_visit.pop_back() {
+                visited.insert(id);
+
+                ins = Vec::new();
+                outs = Vec::new();
+                bell_wires = Vec::new();
+                for (id2, node2) in dg.neighbors_of(id).unwrap() {
+                    if id2 == id {
+                        let b1 = bell_wire.next().unwrap();
+                        let b2 = bell_wire.next().unwrap();
+                        outs.push(b1);
+                        outs.push(b2);
+                        bell_wires.push((b1, b2));
+                        continue;
+                    }
+                    if let (Node::Input(qin), Node::Output(qout))
+                        = (node, node2)
+                    {
+                        visited.insert(id2);
+                        empty_wires.push((qin, qout));
+                        continue;
+                    }
+                    if
+                        !visited.contains(&id2)
+                            && !to_visit.contains(&(id2, node2))
+                    {
+                        to_visit.push_front((id2, node2));
+                    }
+                    if !node.is_generator() { break; }
+                    if
+                        node2.is_input()
+                            || (!node2.is_output() && visited.contains(&id2))
+                    {
+                        if let Node::Input(qid) = node2 {
+                            ins.push(qid.0);
+                        } else {
+                            for wid in dg.wires_between(id, id2).unwrap() {
+                                ins.push(nonq_wire(wid.0));
+                            }
+                        }
+                    } else if
+                        node2.is_output()
+                            || (!node2.is_input() && !visited.contains(&id2))
+                    {
+                        if let Node::Output(qid) = node2 {
+                            outs.push(qid.0);
+                        } else {
+                            for wid in dg.wires_between(id, id2).unwrap() {
+                                outs.push(nonq_wire(wid.0));
+                            }
+                        }
+                    }
+                }
+
+                if node.is_generator() {
+                    elements.push(node.as_element(ins, outs));
+                }
+                if !bell_wires.is_empty() {
+                    for (b1, b2) in bell_wires.into_iter() {
+                        elements.push(ketbra::Element::cap([b1, b2], None));
+                    }
+                }
+            }
+
+            if !empty_wires.is_empty() {
+                empty_wires.sort_by(|(qin_l, _), (qin_r, _)| qin_l.cmp(qin_r));
+                let (idents_in, mut idents_out): (Vec<QubitId>, Vec<QubitId>)
+                    = empty_wires.into_iter().unzip();
+                let mut swaps = Vec::<ketbra::Element>::new();
+                let mut maybe_mismatch: Option<(usize, (&QubitId, &QubitId))>;
+                loop {
+                    maybe_mismatch
+                        = idents_in.iter().zip(idents_out.iter()).enumerate()
+                        .find(|(_, (qin, qout))| qin != qout);
+                    if let Some((k, (qin, qswap))) = maybe_mismatch {
+                        let Some((kswap, _))
+                            = idents_out.iter().enumerate()
+                            .find(|(_, qout)| qin == *qout)
+                            else { unreachable!() };
+                        swaps.push(ketbra::Element::swap([qin.0, qswap.0]));
+                        idents_out.swap(k, kswap);
+                    } else {
+                        break;
+                    }
+                }
+                swaps.reverse();
+                elements.append(&mut swaps);
+            }
+        }
+
+        // first step: all non-scalar nodes
         let mut elements: Vec<ketbra::Element>
             = Vec::with_capacity(self.nodes_inner().count());
         let mut visited: HashSet<NodeId>
             = HashSet::with_capacity(self.nodes_inner().count());
+        // init with input nodes to make sure they're seen first
         let mut to_visit: VecDeque<(NodeId, Node)> = self.inputs().collect();
-        let mut ins: Vec<usize>;
-        let mut outs: Vec<usize>;
-        while let Some((id, node)) = to_visit.pop_back() {
-            visited.insert(id);
+        as_ketbra_inner(self, &mut visited, &mut to_visit, &mut elements);
 
-            ins = Vec::new();
-            outs = Vec::new();
-            for (id2, node2) in self.neighbors_of(id).unwrap() {
-                if
-                    !visited.contains(&id2)
-                        && !to_visit.contains(&(id2, node2))
-                {
-                    to_visit.push_front((id2, node2));
-                }
-                if !node.is_generator() { break; }
-                if
-                    node2.is_input()
-                        || (!node2.is_output() && visited.contains(&id2))
-                {
-                    if let Node::Input(qid) = node2 {
-                        ins.push(qid.0);
-                    } else {
-                        for wid in self.wires_between(id, id2).unwrap() {
-                            ins.push(nonq_wire(wid.0));
-                        }
-                    }
-                } else if
-                    node2.is_output()
-                        || (!node2.is_input() && !visited.contains(&id2))
-                {
-                    if let Node::Output(qid) = node2 {
-                        outs.push(qid.0);
-                    } else {
-                        for wid in self.wires_between(id, id2).unwrap() {
-                            outs.push(nonq_wire(wid.0));
-                        }
-                    }
-                }
-            }
+        // second step: all nodes that aren't part of a scalar
+        // reset `to_visit` with everything not already visited
+        to_visit
+            = self.nodes_inner()
+            .filter(|(id, _)| !visited.contains(id))
+            .collect();
+        as_ketbra_inner(self, &mut visited, &mut to_visit, &mut elements);
 
-            if node.is_generator() {
-                elements.push(node.as_element(ins, outs));
-            }
-        }
         ketbra::Diagram::new(elements)
     }
 
@@ -2622,14 +2734,7 @@ impl Diagram {
     pub fn to_graphviz(&self, name: &str) -> GraphResult<tabbycat::Graph> {
         use tabbycat::*;
         use tabbycat::attributes::*;
-        const SQUARE_HEIGHT: f64 = 0.15;
-        const CIRCLE_HEIGHT: f64 = 0.20;
-        // const Z_COLOR: Color = Color::White;
-        // const X_COLOR: Color = Color::Gray50;
-        // const H_COLOR: Color = Color::White;
-        const Z_COLOR: Color = Color::Rgb(115, 150, 250);
-        const X_COLOR: Color = Color::Rgb(230, 115, 125);
-        const H_COLOR: Color = Color::Rgb(250, 205, 115);
+        use crate::graphviz::*;
         // initial declarations
         let mut statements
             = StmtList::new()
@@ -2640,9 +2745,9 @@ impl Diagram {
             .add_attr(
                 AttrType::Node,
                 AttrList::new()
-                    .add_pair(fontname("DejaVu Sans"))
-                    .add_pair(fontsize(10.0))
-                    .add_pair(margin(0.025))
+                    .add_pair(fontname(FONT))
+                    .add_pair(fontsize(FONTSIZE))
+                    .add_pair(margin(NODE_MARGIN))
                     ,
             );
         // ensure all inputs are in a subgraph at the same rank
@@ -2722,7 +2827,6 @@ impl Diagram {
         statements
             = statements.add_subgraph(SubGraph::cluster(outputs_subgraph_stmt));
         // add interior nodes
-
         for (NodeId(id), node) in self.nodes_inner() {
             let attrs: AttrList
                 = match node {

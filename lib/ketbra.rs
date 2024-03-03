@@ -8,7 +8,10 @@ use std::{
     cmp::Ordering,
     collections::{ HashMap, HashSet },
     fmt,
+    fs,
+    io::Write,
     ops::{ Deref, DerefMut },
+    path::Path,
 };
 pub use std::f64::consts::{
     SQRT_2 as RT2,
@@ -24,7 +27,7 @@ pub use std::f64::consts::{
 use itertools::Itertools;
 use num_complex::Complex64 as C64;
 use thiserror::Error;
-use crate::c;
+use crate::{ c, graph::{ self, format_phase } };
 
 #[derive(Debug, Error)]
 pub enum KBError {
@@ -55,6 +58,16 @@ pub enum KBError {
     /// `diagram: collected elements must have pair-wise matching input/output wires`
     #[error("diagram: collected elements must have pair-wise matching input/output wires")]
     DiagramSliceMatchingWires,
+
+    /// `diagram: encountered a non-generator element`
+    #[error("diagram: encountered a non-generator element")]
+    DiagramConversionNonGenerator,
+
+    #[error("error constructing GraphViz representation: {0}")]
+    GraphVizError(String),
+
+    #[error("I/O error: {0}")]
+    IOError(#[from] std::io::Error),
 }
 pub type KBResult<T> = Result<T, KBError>;
 
@@ -125,7 +138,7 @@ impl State {
                     KetBra::new(c!(-ONRT2), [(idx, Minus)], []),
                 ],
             };
-        Element { terms: ketbras }
+        Element { kind: ElementKind::Unknown, terms: ketbras }
     }
 
     /// Convert `self` to the appropriate basis as in [`Element`] representing
@@ -156,7 +169,7 @@ impl State {
                     KetBra::new(c!(-ONRT2), [], [(idx, Minus)]),
                 ],
             };
-        Element { terms: ketbras }
+        Element { kind: ElementKind::Unknown, terms: ketbras }
     }
 }
 
@@ -228,7 +241,7 @@ impl KetBra {
                     term
                 })
                 .collect();
-            Element { terms }.simplified()
+            Element { kind: ElementKind::Unknown, terms }.simplified()
         }
     }
 
@@ -254,7 +267,7 @@ impl KetBra {
                     term
                 })
                 .collect();
-            Element { terms }.simplified()
+            Element { kind: ElementKind::Unknown, terms }.simplified()
         }
     }
 
@@ -523,6 +536,17 @@ impl fmt::Display for KetBra {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum ElementKind {
+    Z(f64),
+    X(f64),
+    H(C64),
+    Swap(usize, usize),
+    Cup(usize, usize),
+    Cap(usize, usize),
+    Unknown,
+}
+
 /// Represents a single element of a diagram as a sum over [`KetBra`].
 ///
 /// Note that while every named object in the ZX(H)-calculus (i.e., spiders,
@@ -530,6 +554,7 @@ impl fmt::Display for KetBra {
 /// every `Element` will be a named object.
 #[derive(Clone, Debug)]
 pub struct Element {
+    kind: ElementKind,
     terms: Vec<KetBra>
 }
 
@@ -565,7 +590,9 @@ impl IntoIterator for Element {
 }
 
 impl From<KetBra> for Element {
-    fn from(kb: KetBra) -> Self { Self { terms: vec![kb] } }
+    fn from(kb: KetBra) -> Self {
+        Self { kind: ElementKind::Unknown, terms: vec![kb] }
+    }
 }
 
 trait LogicalStateOrd {
@@ -608,6 +635,13 @@ impl LogicalStateOrd for KetBra {
     }
 }
 
+/// A single spider.
+#[derive(Copy, Clone, Debug)]
+pub enum Spider {
+    Z(f64),
+    X(f64),
+}
+
 impl Element {
     /// Create a new `Element` from a list of [`KetBra`]s.
     ///
@@ -635,7 +669,7 @@ impl Element {
             })
             .then_some(())
             .ok_or(KBError::ElementBraSameKeys)?;
-        Ok(Self { terms: ketbras }.simplified())
+        Ok(Self { kind: ElementKind::Unknown, terms: ketbras }.simplified())
     }
 
     /// If `self` contains only one term with an empty ket and bra, extract its
@@ -649,7 +683,10 @@ impl Element {
     fn collect_unchecked<I>(ketbras: I) -> Self
     where I: IntoIterator<Item = KetBra>
     {
-        Self { terms: ketbras.into_iter().collect() }
+        Self {
+            kind: ElementKind::Unknown,
+            terms: ketbras.into_iter().collect(),
+        }
     }
 
     /// Simplify `self` by folding terms with identical kets and bras into each
@@ -685,30 +722,57 @@ impl Element {
     pub fn simplified(mut self) -> Self { self.simplify(); self }
 
     /// Create a scalar (i.e. empty ket and bra) with amplitude `0`.
-    pub fn zero() -> Self { Self { terms: vec![KetBra::new(c!(0.0), [], [])] } }
+    pub fn zero() -> Self {
+        Self {
+            kind: ElementKind::Unknown,
+            terms: vec![KetBra::new(c!(0.0), [], [])],
+        }
+    }
 
     /// Create a scalar (i.e. empty ket and bra) with amplitude `1`.
-    pub fn one() -> Self { Self { terms: vec![KetBra::new(c!(1.0), [], [])] } }
+    pub fn one() -> Self {
+        Self {
+            kind: ElementKind::Unknown,
+            terms: vec![KetBra::new(c!(1.0), [], [])],
+        }
+    }
 
     /// Create a scalar (i.e. empty ket and bra) with arbitrary amplitude.
     pub fn scalar(ampl: C64) -> Self {
-        Self { terms: vec![KetBra::new(ampl, [], [])] }
+        Self {
+            kind: ElementKind::Unknown,
+            terms: vec![KetBra::new(ampl, [], [])],
+        }
     }
 
     /// Return a set of all input wire indices.
     pub fn ins(&self) -> HashSet<usize> {
-        self.terms.iter()
-            .flat_map(|term| term.bra.keys())
-            .copied()
-            .collect()
+        match self.kind {
+            ElementKind::Swap(w1, w2) => [w1, w2].into_iter().collect(),
+            ElementKind::Cup(_, _) => HashSet::new(),
+            ElementKind::Cap(w1, w2) => [w1, w2].into_iter().collect(),
+            _ => {
+                self.terms.iter()
+                    .flat_map(|term| term.bra.keys())
+                    .copied()
+                    .collect()
+            },
+        }
     }
 
     /// Return a set of all output wire indices.
     pub fn outs(&self) -> HashSet<usize> {
-        self.terms.iter()
-            .flat_map(|term| term.ket.keys())
-            .copied()
-            .collect()
+        match self.kind {
+            ElementKind::Swap(w1, w2) => [w1, w2].into_iter().collect(),
+            ElementKind::Cup(w1, w2) => [w1, w2].into_iter().collect(),
+            ElementKind::Cap(_, _) => HashSet::new(),
+            _ => {
+                self.terms.iter()
+                    .flat_map(|term| term.ket.keys())
+                    .copied()
+                    .collect()
+            },
+        }
     }
 
     /// Express all of `self`'s terms in `basis`, simplifying the results.
@@ -717,7 +781,10 @@ impl Element {
             = self.terms.iter()
             .flat_map(|kb| kb.to_basis(basis))
             .collect();
-        Self { terms }.simplified()
+        Self {
+            kind: ElementKind::Unknown,
+            terms,
+        }.simplified()
     }
 
     /// Create the identity element on wire `idx`.
@@ -732,7 +799,7 @@ impl Element {
     ///         \ket{1_{j_0}, \dots, 1_{j_n}} \bra{1_{i_0}, \dots, 1_{i_m}}
     /// ```
     ///
-    /// The phase defaults to `0.0`.
+    /// The phase defaults to `0.0`. Duplicate wire indices are removed.
     pub fn Z<I, J>(ins: I, outs: J, phase: Option<f64>) -> Self
     where
         I: IntoIterator<Item = usize>,
@@ -740,18 +807,21 @@ impl Element {
     {
         let ins: HashSet<usize> = ins.into_iter().collect();
         let outs: HashSet<usize> = outs.into_iter().collect();
-        Self::new([
-            KetBra::new(
-                c!(1.0),
-                outs.iter().map(|idx| (*idx, Zero)),
-                ins.iter().map(|idx| (*idx, Zero)),
-            ),
-            KetBra::new(
-                c!(e phase.unwrap_or(0.0)),
-                outs.iter().map(|idx| (*idx, One)),
-                ins.iter().map(|idx| (*idx, One)),
-            ),
-        ]).unwrap()
+        Self {
+            kind: ElementKind::Z(phase.unwrap_or(0.0)),
+            terms: vec![
+                KetBra::new(
+                    c!(1.0),
+                    outs.iter().map(|idx| (*idx, Zero)),
+                    ins.iter().map(|idx| (*idx, Zero)),
+                ),
+                KetBra::new(
+                    c!(e phase.unwrap_or(0.0)),
+                    outs.iter().map(|idx| (*idx, One)),
+                    ins.iter().map(|idx| (*idx, One)),
+                ),
+            ],
+        }
     }
 
     /// Create an X-spider.
@@ -763,7 +833,7 @@ impl Element {
     ///         \ket{-_{j_0}, \dots, -_{j_n}} \bra{-_{i_0}, \dots, -_{i_m}}
     /// ```
     ///
-    /// The phase defaults to `0.0`.
+    /// The phase defaults to `0.0`. Duplicate wire indices are removed.
     pub fn X<I, J>(ins: I, outs: J, phase: Option<f64>) -> Self
     where
         I: IntoIterator<Item = usize>,
@@ -771,18 +841,21 @@ impl Element {
     {
         let ins: HashSet<usize> = ins.into_iter().collect();
         let outs: HashSet<usize> = outs.into_iter().collect();
-        Self::new([
-            KetBra::new(
-                c!(1.0),
-                outs.iter().map(|idx| (*idx, Plus)),
-                ins.iter().map(|idx| (*idx, Plus)),
-            ),
-            KetBra::new(
-                c!(e phase.unwrap_or(0.0)),
-                outs.iter().map(|idx| (*idx, Minus)),
-                ins.iter().map(|idx| (*idx, Minus)),
-            ),
-        ]).unwrap()
+        Self {
+            kind: ElementKind::X(phase.unwrap_or(0.0)),
+            terms: vec![
+                KetBra::new(
+                    c!(1.0),
+                    outs.iter().map(|idx| (*idx, Plus)),
+                    ins.iter().map(|idx| (*idx, Plus)),
+                ),
+                KetBra::new(
+                    c!(e phase.unwrap_or(0.0)),
+                    outs.iter().map(|idx| (*idx, Minus)),
+                    ins.iter().map(|idx| (*idx, Minus)),
+                ),
+            ],
+        }
     }
 
     /// Create an H-box.
@@ -794,15 +867,15 @@ impl Element {
     ///             \ket{s_{i_0}, \dots, s_{i_n}} \bra{s_{j_0}, \dots, s_{j_m}}
     /// ```
     ///
-    /// The parameter defaults to `-1.0`.
+    /// The parameter defaults to `-1.0`. Duplicate wire indices are removed.
     pub fn H<I, J>(ins: I, outs: J, a: Option<C64>) -> Self
     where
         I: IntoIterator<Item = usize>,
         J: IntoIterator<Item = usize>,
     {
         let a: C64 = a.unwrap_or(c!(-1.0));
-        let ins: Vec<usize> = ins.into_iter().collect();
-        let outs: Vec<usize> = outs.into_iter().collect();
+        let ins: HashSet<usize> = ins.into_iter().collect();
+        let outs: HashSet<usize> = outs.into_iter().collect();
         let terms: Vec<KetBra>
             = if ins.is_empty() {
                 outs.into_iter()
@@ -849,7 +922,7 @@ impl Element {
                 })
                 .collect()
             };
-        Self { terms }
+        Self { kind: ElementKind::H(a), terms }
     }
 
     /// Create a swap.
@@ -861,9 +934,15 @@ impl Element {
     ///     + \ket{0_{i_0} 1_{i_1}} \bra{1_{i_0} 0_{i_1}}
     ///     + \ket{1_{i_0} 1_{i_1}} \bra{1_{i_0} 1_{i_1}}
     /// ```
+    ///
+    /// If the two given wires are equal, return the output of [`Self::id`]
+    /// instead.
     pub fn swap(wires: [usize; 2]) -> Self {
         let i0: usize = wires[0];
         let i1: usize = wires[1];
+        if i0 == i1 {
+            return Self::id(i0);
+        }
         let terms: Vec<KetBra>
             = vec![
                 KetBra::new(
@@ -887,7 +966,7 @@ impl Element {
                     [(i0, One ), (i1, One )],
                 ),
             ];
-        Self { terms }
+        Self { kind: ElementKind::Swap(wires[0], wires[1]), terms }
     }
 
     /// Create a cup (Bell state).
@@ -898,8 +977,23 @@ impl Element {
     ///     = X([], [j_0, j_1], 0)
     ///     = \ket{0_{i_0} 0_{i_1}} + \ket{1_{i_0} 1_{i_1}}
     /// ```
-    pub fn cup(outs: [usize; 2], phase: Option<f64>) -> Self {
-        Self::Z([], outs, phase)
+    ///
+    /// Defaults to the $`\ket{00} + \ket{11}`$ Bell state if no phase is given.
+    ///
+    /// *Panics if the two given wires are equal.*
+    pub fn cup(outs: [usize; 2], phase: Option<Spider>) -> Self {
+        if outs[0] == outs[1] {
+            panic!("Element::cup: wires cannot be equal");
+        }
+        match phase {
+            Some(Spider::Z(ph)) => Element::Z([], outs, Some(ph)),
+            Some(Spider::X(ph)) => Element::X([], outs, Some(ph)),
+            None => {
+                let mut elem = Self::Z([], outs, None);
+                elem.kind = ElementKind::Cup(outs[0], outs[1]);
+                elem
+            },
+        }
     }
 
     /// Create a cap (Bell effect).
@@ -910,8 +1004,24 @@ impl Element {
     ///     = X([i_0, i_1], [], 0)
     ///     = \bra{0_{i_0} 0_{i_1}} + \bra{1_{i_0} 1_{i_1}}
     /// ```
-    pub fn cap(ins: [usize; 2], phase: Option<f64>) -> Self {
-        Self::Z(ins, [], phase)
+    ///
+    /// Defaults to the $`\ket{00} + \ket{11}`$ Bell effect if no phase is
+    /// given.
+    ///
+    /// *Panics if the two given wires are equal.*
+    pub fn cap(ins: [usize; 2], phase: Option<Spider>) -> Self {
+        if ins[0] == ins[1] {
+            panic!("Element::cap: wires cannot be equal");
+        }
+        match phase {
+            Some(Spider::Z(ph)) => Element::Z(ins, [], Some(ph)),
+            Some(Spider::X(ph)) => Element::X(ins, [], Some(ph)),
+            None => {
+                let mut elem = Self::Z(ins, [], None);
+                elem.kind = ElementKind::Cap(ins[0], ins[1]);
+                elem
+            },
+        }
     }
 
     /// Alias for [`Self::new`] for semantics purposes.
@@ -1228,6 +1338,385 @@ impl Diagram {
                 .for_each(|k| { outs.insert(k); });
         }
         (ins, outs)
+    }
+
+    /// Convert `self` to a [`graph::Diagram`] representation.
+    ///
+    /// Note that the indices of input and output wires are not preserved, only
+    /// their order.
+    pub fn as_graph(&self) -> KBResult<graph::Diagram> {
+        let mut graph = graph::Diagram::new();
+        let mut node_id: graph::NodeId;
+        let (ins, outs) = self.ins_outs();
+        let mut inputs: Vec<usize> = ins.into_iter().collect();
+        inputs.sort();
+        let mut outputs: Vec<usize> = outs.into_iter().collect();
+        outputs.sort();
+        let mut wires
+            = HashMap::<usize, graph::NodeId>::new(); // wire idx -> node idx
+        let mut to_remove: Vec<graph::NodeId> = Vec::new(); // placeholder nodes
+
+        // add inputs
+        for idx in inputs.into_iter() {
+            node_id = graph.add_node(graph::NodeDef::Input);
+            wires.insert(idx, node_id);
+        }
+
+        // add elements/wires
+        for elem in self.slices.iter() {
+            match elem.kind {
+                ElementKind::Z(_) | ElementKind::X(_) | ElementKind::H(_) => {
+                    let node_def: graph::NodeDef
+                        = match elem.kind {
+                            ElementKind::Z(ph) => graph::NodeDef::Z(ph),
+                            ElementKind::X(ph) => graph::NodeDef::X(ph),
+                            ElementKind::H(a) => graph::NodeDef::H(a),
+                            _ => unreachable!(),
+                        };
+                    node_id = graph.add_node(node_def);
+                    for in_wire in elem.ins().into_iter() {
+                        if let Some(prev_id) = wires.remove(&in_wire) {
+                            graph.add_wire(prev_id, node_id).ok();
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    for out_wire in elem.outs().into_iter() {
+                        if wires.insert(out_wire, node_id).is_some() {
+                            unreachable!()
+                        }
+                    }
+                },
+                ElementKind::Swap(w1, w2) => {
+                    let Some(n1) = wires.remove(&w1) else { unreachable!() };
+                    let Some(n2) = wires.remove(&w2) else { unreachable!() };
+                    wires.insert(w1, n2);
+                    wires.insert(w2, n1);
+                },
+                ElementKind::Cup(w1, w2) => {
+                    let n1 = graph.add_node(graph::NodeDef::Z(0.0));
+                    to_remove.push(n1);
+                    wires.insert(w1, n1);
+                    let n2 = graph.add_node(graph::NodeDef::Z(0.0));
+                    to_remove.push(n2);
+                    wires.insert(w2, n2);
+                    graph.add_wire(n1, n2).ok();
+                },
+                ElementKind::Cap(w1, w2) => {
+                    let Some(n1) = wires.remove(&w1) else { unreachable!() };
+                    let Some(n2) = wires.remove(&w2) else { unreachable!() };
+                    graph.add_wire(n1, n2).ok();
+                },
+                ElementKind::Unknown => {
+                    return Err(KBError::DiagramConversionNonGenerator);
+                },
+            }
+        }
+
+        // add outputs
+        for idx in outputs.into_iter() {
+            node_id = graph.add_node(graph::NodeDef::Output);
+            if let Some(prev_id) = wires.remove(&idx) {
+                graph.add_wire(prev_id, node_id).ok();
+            } else {
+                unreachable!()
+            }
+        }
+
+        // all nodes to remove here are placeholders for cups; they have
+        // exactly two neighbors
+        let mut n1: graph::NodeId;
+        let mut n2: graph::NodeId;
+        for remove in to_remove.into_iter() {
+            let mut neighbors = graph.neighbors_of(remove).unwrap();
+            n1 = neighbors.next().unwrap().0;
+            n2 = neighbors.next().unwrap().0;
+            graph.remove_node(remove);
+            graph.add_wire(n1, n2).ok();
+        }
+
+        Ok(graph)
+    }
+
+    /// Return an object containing an encoding of `self` in the [dot
+    /// language][dot-lang].
+    ///
+    /// Rendering this object using the default formatter will result in a full
+    /// dot string representation of the diagram.
+    ///
+    /// [dot-lang]: https://en.wikipedia.org/wiki/DOT_(graph_description_language)
+    pub fn to_graphviz(&self, name: &str) -> KBResult<tabbycat::Graph> {
+        use tabbycat::*;
+        use tabbycat::attributes::*;
+        use crate::graphviz::*;
+
+        #[derive(Copy, Clone)]
+        struct Id(usize);
+        impl Id {
+            fn get(&mut self) -> usize {
+                let k = self.0;
+                self.0 += 1;
+                k
+            }
+        }
+        let mut id_gen = Id(0);
+        let mut node_id: usize;
+
+        // initial declarations
+        let mut statements
+            = StmtList::new()
+            .add_attr(
+                AttrType::Graph,
+                AttrList::new().add_pair(rankdir(RankDir::LR)),
+            )
+            .add_attr(
+                AttrType::Node,
+                AttrList::new()
+                    .add_pair(fontname(FONT))
+                    .add_pair(fontsize(FONTSIZE))
+                    .add_pair(margin(NODE_MARGIN))
+                    ,
+            );
+        let (ins, outs) = self.ins_outs();
+        let mut wires = HashMap::<usize, usize>::new(); // wire idx -> node id
+
+        // ensure all inputs are in a subgraph at the same rank
+        let mut inputs_subgraph_stmt
+            = StmtList::new()
+            .add_attr(
+                AttrType::Graph,
+                AttrList::new().add_pair(rank(RankType::Source)),
+            );
+        let mut inputs: Vec<usize> = ins.into_iter().collect();
+        inputs.sort();
+        let mut prev: Option<usize> = None;
+        for idx in inputs.into_iter() {
+            node_id = id_gen.get();
+            wires.insert(idx, node_id);
+            inputs_subgraph_stmt
+                = inputs_subgraph_stmt.add_node(
+                    node_id.into(),
+                    None,
+                    Some(
+                        AttrList::new()
+                            .add_pair(label(format!("In {}", idx)))
+                            .add_pair(shape(Shape::Plaintext))
+                    ),
+                );
+            if let Some(prev_idx) = prev {
+                inputs_subgraph_stmt
+                    = inputs_subgraph_stmt.add_edge(
+                        Edge::head_node(
+                            prev_idx.into(),
+                            Some(Port::compass(Compass::South)),
+                        )
+                        .line_to_node(
+                            node_id.into(),
+                            Some(Port::compass(Compass::North)),
+                        )
+                        .add_attrpair(style(Style::Invisible))
+                    );
+            }
+            prev = Some(node_id);
+        }
+        statements
+            = statements.add_subgraph(SubGraph::cluster(inputs_subgraph_stmt));
+
+        // add elements/wires
+        let mut u_idx = Id(0);
+        for elem in self.slices.iter() {
+            match elem.kind {
+                ElementKind::Z(_)
+                | ElementKind::X(_)
+                | ElementKind::H(_)
+                | ElementKind::Unknown
+                => {
+                    node_id = id_gen.get();
+                    let attrs
+                        = match elem.kind {
+                            ElementKind::Z(ph) => {
+                                AttrList::new()
+                                    .add_pair(label(format_phase(ph)))
+                                    .add_pair(shape(Shape::Circle))
+                                    .add_pair(height(CIRCLE_HEIGHT))
+                                    .add_pair(style(Style::Filled))
+                                    .add_pair(fillcolor(Z_COLOR))
+                            },
+                            ElementKind::X(ph) => {
+                                AttrList::new()
+                                    .add_pair(label(format_phase(ph)))
+                                    .add_pair(shape(Shape::Circle))
+                                    .add_pair(height(CIRCLE_HEIGHT))
+                                    .add_pair(style(Style::Filled))
+                                    .add_pair(fillcolor(X_COLOR))
+                            },
+                            ElementKind::H(a) => {
+                                let a_label
+                                    = if a == c!(-1.0) {
+                                        "".to_string()
+                                    } else {
+                                        format!("{}", a)
+                                    };
+                                AttrList::new()
+                                    .add_pair(label(a_label))
+                                    .add_pair(shape(Shape::Square))
+                                    .add_pair(height(SQUARE_HEIGHT))
+                                    .add_pair(style(Style::Filled))
+                                    .add_pair(fillcolor(H_COLOR))
+                            },
+                            ElementKind::Unknown => {
+                                let u_label = format!("U{}",
+                                    subscript_str(u_idx.get()));
+                                AttrList::new()
+                                    .add_pair(label(u_label))
+                                    .add_pair(shape(Shape::Rectangle))
+                                    .add_pair(style(Style::Filled))
+                                    .add_pair(fillcolor(Color::White))
+                            },
+                            _ => unreachable!(),
+                        };
+                    statements
+                        = statements.add_node(
+                            node_id.into(), None, Some(attrs));
+                    for in_wire in elem.ins().into_iter() {
+                        if let Some(prev_id) = wires.remove(&in_wire) {
+                            statements
+                                = statements.add_edge(
+                                    Edge::head_node(prev_id.into(), None)
+                                        .line_to_node(node_id.into(), None)
+                                );
+                        } else {
+                            unreachable!()
+                        }
+                    }
+                    for out_wire in elem.outs().into_iter() {
+                        if wires.insert(out_wire, node_id).is_some() {
+                            unreachable!()
+                        }
+                    }
+                },
+                ElementKind::Swap(w1, w2) => {
+                    let Some(n1) = wires.remove(&w1) else { unreachable!() };
+                    let Some(n2) = wires.remove(&w2) else { unreachable!() };
+                    wires.insert(w1, n2);
+                    wires.insert(w2, n1);
+                },
+                ElementKind::Cup(w1, w2) => {
+                    let n1 = id_gen.get();
+                    let attrs1
+                        = AttrList::new().add_pair(style(Style::Invisible));
+                    statements
+                        = statements.add_node(n1.into(), None, Some(attrs1));
+                    wires.insert(w1, n1);
+                    let n2 = id_gen.get();
+                    let attrs2
+                        = AttrList::new().add_pair(style(Style::Invisible));
+                    statements
+                        = statements.add_node(n2.into(), None, Some(attrs2));
+                    wires.insert(w2, n2);
+                    statements
+                        = statements.add_edge(
+                            Edge::head_node(
+                                n1.into(),
+                                None,
+                            )
+                            .line_to_node(
+                                n2.into(),
+                                None,
+                            )
+                        );
+                },
+                ElementKind::Cap(w1, w2) => {
+                    let Some(n1) = wires.remove(&w1) else { unreachable!() };
+                    let Some(n2) = wires.remove(&w2) else { unreachable!() };
+                    statements
+                        = statements.add_edge(
+                            Edge::head_node(
+                                n1.into(),
+                                None,
+                            )
+                            .line_to_node(
+                                n2.into(),
+                                None,
+                            )
+                        );
+                },
+            }
+        }
+
+        // ensure all outputs are in a subgraph at the same rank
+        let mut outputs_subgraph_stmt
+            = StmtList::new()
+            .add_attr(
+                AttrType::Graph,
+                AttrList::new().add_pair(rank(RankType::Sink)),
+            );
+        let mut outputs: Vec<usize> = outs.into_iter().collect();
+        outputs.sort();
+        let mut prev: Option<usize> = None;
+        for idx in outputs.into_iter() {
+            node_id = id_gen.get();
+            outputs_subgraph_stmt
+                = outputs_subgraph_stmt.add_node(
+                    node_id.into(),
+                    None,
+                    Some(
+                        AttrList::new()
+                            .add_pair(label(format!("Out {}", idx)))
+                            .add_pair(shape(Shape::Plaintext))
+                    ),
+                );
+            if let Some(prev_idx) = prev {
+                outputs_subgraph_stmt
+                    = outputs_subgraph_stmt.add_edge(
+                        Edge::head_node(
+                            prev_idx.into(),
+                            Some(Port::compass(Compass::South)),
+                        )
+                        .line_to_node(
+                            node_id.into(),
+                            Some(Port::compass(Compass::North)),
+                        )
+                        .add_attrpair(style(Style::Invisible))
+                    );
+            }
+            prev = Some(node_id);
+            if let Some(prev_id) = wires.remove(&idx) {
+                statements
+                    = statements.add_edge(
+                        Edge::head_node(prev_id.into(), None)
+                            .line_to_node(node_id.into(), None)
+                    );
+            } else {
+                unreachable!()
+            }
+        }
+        statements
+            = statements.add_subgraph(SubGraph::cluster(outputs_subgraph_stmt));
+
+        GraphBuilder::default()
+            .graph_type(GraphType::Graph)
+            .strict(false)
+            .id(Identity::quoted(name))
+            .stmts(statements)
+            .build()
+            .map_err(KBError::GraphVizError)
+    }
+
+    /// Like [`to_graphviz`][Self::to_graphviz], but render directly to a string
+    /// and write it to `path`.
+    pub fn save_graphviz<P>(&self, name: &str, path: P) -> KBResult<()>
+    where P: AsRef<Path>
+    {
+        let graphviz = self.to_graphviz(name)?;
+        fs::OpenOptions::new()
+            .write(true)
+            .append(false)
+            .create(true)
+            .truncate(true)
+            .open(path)?
+            .write_all(format!("{}", graphviz).as_bytes())?;
+        Ok(())
     }
 }
 

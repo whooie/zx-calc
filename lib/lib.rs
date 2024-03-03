@@ -35,6 +35,7 @@
 pub mod circuit;
 pub mod ketbra;
 pub mod graph;
+pub(crate) mod graphviz;
 
 pub extern crate num_complex;
 /// Handy macro to create `num_complex::Complex64`s from more natural and
