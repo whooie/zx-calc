@@ -1,8 +1,16 @@
 [package]
 name = "zx-calc"
 version = "0.1.0"
+description = "Implementations of the ZX(H)-calculus"
+readme = "README.md"
+# license = ""
 authors = [ "Will Huie <wcwhuie@gmail.com>",]
 edition = "2021"
+homepage = "https://gitlab.com/wchooie/zx-calc"
+repository = "https://gitlab.com/wchooie/zx-calc.git"
+# documentation = ""
+keywords = ["zx", "zx-calculus", "quantum", "quantum computing"]
+# categories = []
 
 [dependencies]
 # indexmap = "*"
@@ -17,15 +25,13 @@ ndarray = "0.15.6"
 # ndarray-npy = "*"
 tabbycat = "0.1.3"
 thiserror = "1.0.57"
-anyhow = "1.0.80"
 
 [lib]
 path = "lib/lib.rs"
 name = "zx_calc"
 
-[[bin]]
-path = "src/main.rs"
-name = "main"
+[dev-dependencies]
+anyhow = "1.0.80"
 
 # [dependencies.ndarray-linalg]
 # version = "*"
