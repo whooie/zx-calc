@@ -2475,7 +2475,67 @@ impl Diagram {
 
     /// Simplify a diagram by applying all simplification rules until no further
     /// simplifications can be made.
-    pub fn simplify(&mut self) { todo!() }
+    pub fn simplify(&mut self) {
+        use std::convert::identity;
+        loop {
+            if [
+                self.simplify_hstate(),
+                self.simplify_hmultistate(),
+                self.simplify_fuse(),
+                self.simplify_hfuse(),
+                self.simplify_identity(),
+                self.simplify_hloop(),
+                self.simplify_state_copy(),
+                self.simplify_hstate_mul(),
+                self.simplify_hstate_copy(),
+                self.simplify_habsorb(),
+                self.simplify_hexplode(),
+            ].into_iter().any(identity)
+            { continue; }
+
+            if [
+                self.simplify_ih_sandwich(),
+                self.simplify_phase_neg(),
+                self.simplify_color_flip(),
+            ].into_iter().any(identity)
+            { continue; }
+
+            if [
+                self.simplify_hopf(),
+                self.simplify_h2hopf(),
+                self.simplify_hhopf(),
+            ].into_iter().any(identity)
+            { continue; }
+
+            if [
+                // self.simplify_bialgebra(),
+                // self.simplify_hbialgebra(),
+                self.simplify_bit_bialgebra(),
+            ].into_iter().any(identity)
+            { continue; }
+
+            if [
+                // self.simplify_hmul(),
+                self.simplify_havg(),
+                self.simplify_hintro(),
+            ].into_iter().any(identity)
+            { continue; }
+
+            if [
+                self.reduce_h(),
+                self.reduce_pi(),
+            ].into_iter().any(identity)
+            { continue; }
+
+            if [
+                self.simplify_hmove(),
+                self.simplify_pi_commute(),
+            ].into_iter().any(identity)
+            { continue; }
+
+            break;
+        }
+    }
 
     /// Find all nodes that are part of a scalar subgraph.
     ///

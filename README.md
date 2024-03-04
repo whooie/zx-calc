@@ -44,7 +44,8 @@ reasoning about linear maps between two-level quantum states.
         - [x] H-state multiplication rule
         - [ ] Generalized H-box multiplication rule
         - [x] H-box wire introduction rule (reversed)
-    - [ ] Single, exhaustive "simplify"
+    - [ ] Single, exhaustive "simplify" (partial: waiting on final rewrite rules
+      and testing with different strategies)
     - [x] Scalar computation and removal
     - [ ] Equality testing via simplification
 - Circuits
