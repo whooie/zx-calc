@@ -9,8 +9,14 @@ edition = "2021"
 homepage = "https://gitlab.com/wchooie/zx-calc"
 repository = "https://gitlab.com/wchooie/zx-calc.git"
 # documentation = ""
-keywords = ["zx", "zx-calculus", "quantum", "quantum computing"]
-# categories = []
+keywords = [
+    "zx",
+    "zx-calculus",
+    "zx calculus",
+    "quantum",
+    "quantum computing",
+]
+categories = [ "science",]
 
 [dependencies]
 # indexmap = "*"
@@ -40,3 +46,8 @@ anyhow = "1.0.80"
 [profile.release]
 lto = true
 panic = "abort"
+
+[package.metadata.docs.rs]
+# To build locally use
+#   RUSTDOCFLAGS="--html-in-header katex-header.html" cargo doc --no-deps --document-private-items --open
+rustdoc-args = ["--html-in-header", "katex-header.html"]

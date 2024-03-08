@@ -191,8 +191,8 @@ pub enum Basis {
 /// ```math
 /// a \ket{s_{j_0}, \dots, s_{j_n}} \bra{s_{i_0}, \dots, s_{i_m}}
 /// ```
-/// where $`a`$ is the amplitude and $`s_k \in \{0, 1, +, -\}`$. $`i_0, \dots,
-/// i_n`$ and $`j_0, \dots, j_m`$ index incoming and outgoing wires.
+/// where `$a$` is the amplitude and `$s_k \in \{0, 1, +, -\}$`. `$i_0, \dots,
+/// i_n$` and `$j_0, \dots, j_m$` index incoming and outgoing wires.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KetBra {
     ampl: C64,
@@ -393,7 +393,7 @@ impl KetBra {
         Self { ampl, ket, bra }
     }
 
-    /// Compute the dot-product of `self` and `rhs.
+    /// Compute the dot-product of `self` and `rhs`.
     ///
     /// Unmatched kets and bras are left untouched and "passed through" the
     /// product; e.g.
@@ -482,7 +482,7 @@ impl KetBra {
         Ok(Element::new(terms)?.simplified())
     }
 
-    /// Compute the dot-product of `self` and `rhs, consuming both.
+    /// Compute the dot-product of `self` and `rhs`, consuming both.
     ///
     /// Unmatched kets and bras are left untouched and "passed through" the
     /// product; e.g.
@@ -978,7 +978,7 @@ impl Element {
     ///     = \ket{0_{i_0} 0_{i_1}} + \ket{1_{i_0} 1_{i_1}}
     /// ```
     ///
-    /// Defaults to the $`\ket{00} + \ket{11}`$ Bell state if no phase is given.
+    /// Defaults to the `$\ket{00} + \ket{11}$` Bell state if no phase is given.
     ///
     /// *Panics if the two given wires are equal.*
     pub fn cup(outs: [usize; 2], phase: Option<Spider>) -> Self {
@@ -1005,7 +1005,7 @@ impl Element {
     ///     = \bra{0_{i_0} 0_{i_1}} + \bra{1_{i_0} 1_{i_1}}
     /// ```
     ///
-    /// Defaults to the $`\ket{00} + \ket{11}`$ Bell effect if no phase is
+    /// Defaults to the `$\ket{00} + \ket{11}$` Bell effect if no phase is
     /// given.
     ///
     /// *Panics if the two given wires are equal.*
@@ -1292,7 +1292,7 @@ impl Diagram {
     /// inputs of `self`.
     ///
     /// This is equivalent to appending `self` to the the end of `rhs`,
-    /// analogous to the usual $`\circ`$ composition operation.
+    /// analogous to the usual `$\circ$` composition operation.
     pub fn compose(&self, rhs: &Self) -> Self {
         Self {
             slices:
