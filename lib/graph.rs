@@ -547,7 +547,7 @@ struct Hopf(NodeId, NodeId);
 /// adjoining wires, each with a single H-box with default argument.
 #[derive(Copy, Clone, Debug)]
 struct H2Hopf(NodeId, NodeId);
-//     H2Hopf(hbox1, hbox2)
+//     H2Hopf(spider1, spider2)
 
 /// A spider of arbitrary arity and phase with a single self-loop containing a
 /// single H-box with default argument.
@@ -555,11 +555,11 @@ struct H2Hopf(NodeId, NodeId);
 struct HLoop(NodeId, NodeId);
 //     HLoop(spider, hbox)
 
-/// Two spiders of arbitrarity arity and phase π/2 with the same color
-/// sandwiching an H-box with default argument on a single wire.
+/// Two spiders of arbitrarity arity and phase with the same color sandwiching
+/// an H-box with default argument on a single wire.
 #[derive(Copy, Clone, Debug)]
-struct IHSandwich(NodeId, NodeId, NodeId);
-//     IHSandwich(spider1, hbox, spider2)
+struct HEuler(NodeId, NodeId, NodeId);
+//     HEuler(spider1, hbox, spider2)
 
 /// Two spiders of arbitrary arity and phase with opposite colors sandwiching an
 /// H-box with default argument on a single wire.
@@ -598,6 +598,12 @@ struct BiAlgebra(Vec<NodeId>, Vec<NodeId>);
 #[derive(Copy, Clone, Debug)]
 struct BitBiAlgebra(NodeId, NodeId, NodeId, NodeId);
 //     BitBiAlgebra(z-spider1, z-spider2, x-spider1, x-spider2)
+
+/// A unary spider of arbitrary color with phase ±π/2 optionally connected to
+/// another spider of arbitrary color.
+#[derive(Copy, Clone, Debug)]
+struct IState(NodeId, Option<NodeId>);
+//     IState(state, maybe inner spider)
 
 /// A spider of arbitrary arity and phase connected to a single oppositely
 /// colored state/effect with phase equal to an integer multiple of π.
@@ -727,42 +733,10 @@ impl Diagram {
     pub fn from_nodes<I>(nodes: I) -> Self
     where I: IntoIterator<Item = NodeDef>
     {
-        let mut input_counter: usize = 0;
-        let mut output_counter: usize = 0;
-        let nodes: HashMap<NodeId, Node>
-            = nodes.into_iter()
-            .enumerate()
-            .map(|(k, node_def)| {
-                let node
-                    = match node_def {
-                        NodeDef::Z(ph) => Node::Z(ph),
-                        NodeDef::X(ph) => Node::X(ph),
-                        NodeDef::H(a) => Node::H(a),
-                        NodeDef::Input => {
-                            let node = Node::Input(input_counter.into());
-                            input_counter += 1;
-                            node
-                        },
-                        NodeDef::Output => {
-                            let node = Node::Output(output_counter.into());
-                            output_counter += 1;
-                            node
-                        },
-                    };
-                (k.into(), node)
-            })
-            .collect();
-        let node_id = nodes.len();
-        Self {
-            nodes,
-            wires: HashMap::new(),
-            wires_from: HashMap::new(),
-            wires_between: HashMap::new(),
-            node_id,
-            input_counter,
-            output_counter,
-            edge_id: 0,
-        }
+        let mut dg = Self::new();
+        nodes.into_iter()
+            .for_each(|def| { dg.add_node(def); });
+        dg
     }
 
     /// Return the number of nodes.
@@ -1448,7 +1422,7 @@ impl Diagram {
                 for (id2, node2) in self.neighbors_of_inner(id).unwrap() {
                     if
                         node2.is_x()
-                        && self.mutual_arity(id, id2).unwrap() == 2
+                        && self.mutual_arity(id, id2).unwrap() >= 2
                     {
                         return Some(Hopf(id, id2));
                     }
@@ -1457,7 +1431,7 @@ impl Diagram {
                 for (id2, node2) in self.neighbors_of_inner(id).unwrap() {
                     if
                         node2.is_z()
-                        && self.mutual_arity(id, id2).unwrap() == 2
+                        && self.mutual_arity(id, id2).unwrap() >= 2
                     {
                         return Some(Hopf(id, id2));
                     }
@@ -1474,7 +1448,8 @@ impl Diagram {
             let wires: Vec<WireId>
                 = self.wires_between(s1, s2).unwrap()
                 .collect();
-            wires.into_iter()
+            let n = wires.len();
+            wires.into_iter().take(2 * (n / 2))
                 .for_each(|id| { self.remove_wire(id); });
             true
         } else {
@@ -1489,25 +1464,36 @@ impl Diagram {
         let n1 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
             n.is_h() && n.has_defarg() && dg.arity(id).unwrap() == 2
         };
-        let n2 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
-            (p[0].1.is_z() && n.is_z()) || (p[0].1.is_x() && n.is_x())
-                && dg.mutual_arity(id, p[0].0).is_some_and(|deg| deg == 0)
+        let n2 = |_: &Diagram, p: &NodePath, _: &NodeId, n: &Node| {
+            n.is_same_color(&p[0].1)
         };
         let n3 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
             n.is_h() && n.has_defarg() && dg.arity(id).unwrap() == 2
                 && dg.mutual_arity(id, p[0].0).is_some_and(|deg| deg == 1)
         };
         self.find_path(self.nodes_inner(), &[n0, n1, n2, n3], Vec::new())
-            .map(|path| H2Hopf(path[1].0, path[3].0))
+            .map(|path| H2Hopf(path[0].0, path[2].0))
     }
 
     /// Apply a variant of the Hopf rule, disconnecting two spiders of arbitrary
     /// arity and phase joined by two wires, each with a single H-box of default
     /// argument.
     pub fn simplify_h2hopf(&mut self) -> bool {
-        if let Some(H2Hopf(h1, h2)) = self.find_h2hopf() {
-            self.remove_node(h1);
-            self.remove_node(h2);
+        if let Some(H2Hopf(s1, s2)) = self.find_h2hopf() {
+            let hboxes: Vec<NodeId>
+                = self.neighbors_of(s1).unwrap()
+                .filter_map(|(id, node)| {
+                    (
+                        node.is_h()
+                        && node.has_defarg()
+                        && self.arity(id).unwrap() == 2
+                        && self.mutual_arity(id, s2).unwrap() == 1
+                    ).then_some(id)
+                })
+                .collect();
+            let n = hboxes.len();
+            hboxes.into_iter().take(2 * (n / 2))
+                .for_each(|h| { self.remove_node(h); });
             true
         } else {
             false
@@ -1550,26 +1536,56 @@ impl Diagram {
         }
     }
 
-    fn find_ih_sandwich(&self) -> Option<IHSandwich> {
-        let n0 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
-            n.has_phase(PI2) && dg.arity(id).unwrap() == 2
+    fn find_h_euler(&self) -> Option<HEuler> {
+        let n0 = |_: &Diagram, _: &NodePath, _: &NodeId, n: &Node| {
+            n.is_spider()
         };
         let n1 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
             n.is_h() && n.has_defarg() && dg.arity(id).unwrap() == 2
         };
-        let n2 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
-            p[0].1.is_same_color_and(n, |_, ph| phase_eq(ph, PI2))
-                && dg.arity(id).unwrap() == 2
+        let n2 = |_: &Diagram, p: &NodePath, _: &NodeId, n: &Node| {
+            n.is_same_color(&p[0].1)
         };
         self.find_path(self.nodes_inner(), &[n0, n1, n2], Vec::new())
-            .map(|path| IHSandwich(path[0].0, path[1].0, path[2].0))
+            .map(|path| HEuler(path[0].0, path[1].0, path[2].0))
     }
 
-    /// Simplify two spiders of the same color with π/2 phase sandwiching an
-    /// H-box on a single wire by rewriting the H-box as its Euler angles and
-    /// fusing spiders appropriately.
-    pub fn simplify_ih_sandwich(&mut self) -> bool {
-        if let Some(IHSandwich(s1, h, s2)) = self.find_ih_sandwich() {
+    /// Simplify two spiders of the same color sandwiching an H-box on a single
+    /// wire by rewriting the H-box as its Euler angles and fusing spiders
+    /// appropriately.
+    pub fn simplify_h_euler(&mut self) -> bool {
+        fn unfuse(dg: &mut Diagram, s: NodeId, h: NodeId) -> NodeId {
+            let (renew, new_def)
+                = match dg.nodes[&s] {
+                    Node::Z(ph) => (
+                        Node::Z((ph - PI2).rem_euclid(TAU)),
+                        NodeDef::Z(PI2),
+                    ),
+                    Node::X(ph) => (
+                        Node::X((ph - PI2).rem_euclid(TAU)),
+                        NodeDef::X(PI2),
+                    ),
+                    _ => unreachable!(),
+                };
+            if let Some(node) = dg.nodes.get_mut(&s) { *node = renew; }
+            let new = dg.add_node(new_def);
+            dg.add_wire(s, new).ok();
+            dg.add_wire(new, h).ok();
+            let prev_h_wire = dg.wires_between(s, h).unwrap().next().unwrap();
+            dg.remove_wire(prev_h_wire);
+            new
+        }
+
+        if let Some(HEuler(s1, h, s2)) = self.find_h_euler() {
+            let unfuse1
+                = self.arity(s1).unwrap() != 2
+                || !phase_eq(self.nodes[&s1].phase().unwrap(), PI2);
+            let s1 = if unfuse1 { unfuse(self, s1, h) } else { s1 };
+            let unfuse2
+                = self.arity(s2).unwrap() != 2
+                || !phase_eq(self.nodes[&s2].phase().unwrap(), PI2);
+            let s2 = if unfuse2 { unfuse(self, s2, h) } else { s2 };
+
             let neighbors: Vec<NodeId>
                 = self.neighbors_of(s1).unwrap()
                 .chain(self.neighbors_of(s2).unwrap())
@@ -1603,7 +1619,6 @@ impl Diagram {
         let n2 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
             ((p[0].1.is_z() && n.is_x()) || (p[0].1.is_x() && n.is_z()))
                 && dg.mutual_arity(id, p[1].0).unwrap() == 1
-                && dg.mutual_arity(id, p[0].0).unwrap() == 0
         };
         self.find_path(self.nodes_inner(), &[n0, n1, n2], Vec::new())
             .map(|path| HMove(path[0].0, path[1].0, path[2].0))
@@ -1616,12 +1631,13 @@ impl Diagram {
             self.remove_node(h);
             let neighbors1: Vec<NodeId>
                 = self.neighbors_of(s1).unwrap()
-                .map(|(id, _)| id)
+                .filter_map(|(id, _)| (id != s2).then_some(id))
                 .collect();
             let neighbors2: Vec<NodeId>
                 = self.neighbors_of(s2).unwrap()
-                .map(|(id, _)| id)
+                .filter_map(|(id, _)| (id != s1).then_some(id))
                 .collect();
+            let direct_wires = self.mutual_arity(s1, s2).unwrap();
             let (s, add_h_wire, add_wire, self_loops)
                 : (NodeId, Vec<NodeId>, Vec<NodeId>, usize)
                 = if neighbors1.len() <= neighbors2.len() {
@@ -1668,6 +1684,11 @@ impl Diagram {
                     self.add_wire(s, h).ok();
                     self.add_wire(h, id).ok();
                 }
+            }
+            for _ in 0..direct_wires {
+                let h = self.add_node(NodeDef::h());
+                self.add_wire(s, h).ok();
+                self.add_wire(s, h).ok();
             }
             add_wire.into_iter().for_each(|id| { self.add_wire(s, id).ok(); });
             (0..self_loops).for_each(|_| { self.add_wire(s, s).ok(); });
@@ -2088,6 +2109,66 @@ impl Diagram {
             self.add_wire(x, z_neighbors.0).ok();
             self.add_wire(x, z_neighbors.1).ok();
             self.add_wire(z, x).ok();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn find_istate(&self) -> Option<IState> {
+        for (id, node) in self.nodes_inner() {
+            if
+                node.is_spider_and(|ph| {
+                    phase_eq(ph, PI2) || phase_eq(ph, -PI2) })
+                && self.arity(id).unwrap() == 1
+            {
+                let maybe_spider
+                    = self.neighbors_of(id).unwrap()
+                    .next()
+                    .and_then(|(id2, node2)| {
+                        node2.is_spider().then_some(id2)
+                    });
+                if node.is_x() || maybe_spider.is_some() {
+                    return Some(IState(id, maybe_spider));
+                }
+            }
+        }
+        None
+    }
+
+    /// Simplify by converting a state/effect spider with phase ±π/2 to the
+    /// appropriate color and fusing if it is connected to another spider,
+    /// otherwise converting it to Z.
+    pub fn simplify_istate(&mut self) -> bool {
+        if let Some(IState(state, maybe_spider)) = self.find_istate() {
+            if let Some(spider_id) = maybe_spider {
+                let state_node = self.remove_node(state).unwrap();
+                match (state_node, self.nodes.get_mut(&spider_id).unwrap()) {
+                    (Node::Z(ph1), node) => match node {
+                        Node::Z(ph2) => {
+                            *node = Node::Z((*ph2 + ph1).rem_euclid(TAU));
+                        },
+                        Node::X(ph2) => {
+                            *node = Node::X((*ph2 - ph1).rem_euclid(TAU));
+                        },
+                        _ => unreachable!(),
+                    },
+                    (Node::X(ph1), node) => match node {
+                        Node::Z(ph2) => {
+                            *node = Node::Z((*ph2 - ph1).rem_euclid(TAU));
+                        },
+                        Node::X(ph2) => {
+                            *node = Node::X((*ph2 + ph1).rem_euclid(TAU));
+                        },
+                        _ => unreachable!(),
+                    },
+                    _ => unreachable!(),
+                }
+            } else if let Some(node) = self.nodes.get_mut(&state) {
+                if let Node::X(ph) = node {
+                    *node = Node::Z((-*ph).rem_euclid(TAU));
+                }
+            }
             true
         } else {
             false
@@ -2516,24 +2597,19 @@ impl Diagram {
         use std::convert::identity;
         loop {
             if [
+                self.simplify_istate(),
                 self.simplify_hstate(),
                 self.simplify_hmultistate(),
+                self.simplify_hstate_copy(),
+                self.simplify_state_copy(),
+                self.simplify_color_flip(),
                 self.simplify_fuse(),
                 self.simplify_hfuse(),
                 self.simplify_identity(),
                 self.simplify_hloop(),
-                self.simplify_state_copy(),
                 self.simplify_hstate_mul(),
-                self.simplify_hstate_copy(),
                 self.simplify_habsorb(),
                 self.simplify_hexplode(),
-            ].into_iter().any(identity)
-            { continue; }
-
-            if [
-                self.simplify_ih_sandwich(),
-                self.simplify_phase_neg(),
-                self.simplify_color_flip(),
             ].into_iter().any(identity)
             { continue; }
 
@@ -2541,6 +2617,12 @@ impl Diagram {
                 self.simplify_hopf(),
                 self.simplify_h2hopf(),
                 self.simplify_hhopf(),
+            ].into_iter().any(identity)
+            { continue; }
+
+            if [
+                self.simplify_h_euler(),
+                self.simplify_phase_neg(),
             ].into_iter().any(identity)
             { continue; }
 
@@ -2591,6 +2673,9 @@ impl Diagram {
         // the returned value may contain multiple disconnected scalar subgraphs
 
         let mut nodes: HashMap<NodeId, Node> = self.nodes.clone();
+        if !nodes.iter().any(|(_, node)| !node.is_generator()) {
+            return nodes;
+        }
         let mut to_visit: VecDeque<NodeId>;
         for (io, _) in self.inputs().chain(self.outputs()) {
             to_visit = vec![io].into();
