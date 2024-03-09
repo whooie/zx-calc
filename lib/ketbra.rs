@@ -6,7 +6,7 @@
 
 use std::{
     cmp::Ordering,
-    collections::{ HashMap, HashSet },
+    // collections::{ HashMap, HashSet },
     fmt,
     fs,
     io::Write,
@@ -26,6 +26,7 @@ pub use std::f64::consts::{
 };
 use itertools::Itertools;
 use num_complex::Complex64 as C64;
+use rustc_hash::{ FxHashMap as HashMap, FxHashSet as HashSet };
 use thiserror::Error;
 use crate::{ c, graph::{ self, format_phase } };
 
@@ -367,8 +368,8 @@ impl KetBra {
     where I: IntoIterator<Item = &'a KetBra>
     {
         let mut ampl: C64 = c!(1.0);
-        let mut ket: HashMap<usize, State> = HashMap::new();
-        let mut bra: HashMap<usize, State> = HashMap::new();
+        let mut ket: HashMap<usize, State> = HashMap::default();
+        let mut bra: HashMap<usize, State> = HashMap::default();
         for kb in ketbras.into_iter() {
             let KetBra { ampl: ampl_k, ket: ket_k, bra: bra_k } = kb;
             ampl *= ampl_k;
@@ -382,8 +383,8 @@ impl KetBra {
     where I: IntoIterator<Item = KetBra>
     {
         let mut ampl: C64 = c!(1.0);
-        let mut ket: HashMap<usize, State> = HashMap::new();
-        let mut bra: HashMap<usize, State> = HashMap::new();
+        let mut ket: HashMap<usize, State> = HashMap::default();
+        let mut bra: HashMap<usize, State> = HashMap::default();
         for kb in ketbras.into_iter() {
             let KetBra { ampl: ampl_k, ket: ket_k, bra: bra_k } = kb;
             ampl *= ampl_k;
@@ -749,7 +750,7 @@ impl Element {
     pub fn ins(&self) -> HashSet<usize> {
         match self.kind {
             ElementKind::Swap(w1, w2) => [w1, w2].into_iter().collect(),
-            ElementKind::Cup(_, _) => HashSet::new(),
+            ElementKind::Cup(_, _) => HashSet::default(),
             ElementKind::Cap(w1, w2) => [w1, w2].into_iter().collect(),
             _ => {
                 self.terms.iter()
@@ -765,7 +766,7 @@ impl Element {
         match self.kind {
             ElementKind::Swap(w1, w2) => [w1, w2].into_iter().collect(),
             ElementKind::Cup(w1, w2) => [w1, w2].into_iter().collect(),
-            ElementKind::Cap(_, _) => HashSet::new(),
+            ElementKind::Cap(_, _) => HashSet::default(),
             _ => {
                 self.terms.iter()
                     .flat_map(|term| term.ket.keys())
@@ -1321,8 +1322,8 @@ impl Diagram {
 
     /// Return sets of all input and output wire indices.
     pub fn ins_outs(&self) -> (HashSet<usize>, HashSet<usize>) {
-        let mut ins: HashSet<usize> = HashSet::new();
-        let mut outs: HashSet<usize> = HashSet::new();
+        let mut ins: HashSet<usize> = HashSet::default();
+        let mut outs: HashSet<usize> = HashSet::default();
         for element in self.slices.iter() {
             element.ins()
                 .into_iter()
@@ -1353,7 +1354,7 @@ impl Diagram {
         let mut outputs: Vec<usize> = outs.into_iter().collect();
         outputs.sort();
         let mut wires
-            = HashMap::<usize, graph::NodeId>::new(); // wire idx -> node idx
+            = HashMap::<usize, graph::NodeId>::default(); // wire idx -> node idx
         let mut to_remove: Vec<graph::NodeId> = Vec::new(); // placeholder nodes
 
         // add inputs
@@ -1448,18 +1449,8 @@ impl Diagram {
     pub fn to_graphviz(&self, name: &str) -> KBResult<tabbycat::Graph> {
         use tabbycat::*;
         use tabbycat::attributes::*;
-        use crate::graphviz::*;
-
-        #[derive(Copy, Clone)]
-        struct Id(usize);
-        impl Id {
-            fn get(&mut self) -> usize {
-                let k = self.0;
-                self.0 += 1;
-                k
-            }
-        }
-        let mut id_gen = Id(0);
+        use crate::vizdefs::*;
+        let mut id_gen = 0..;
         let mut node_id: usize;
 
         // initial declarations
@@ -1478,7 +1469,7 @@ impl Diagram {
                     ,
             );
         let (ins, outs) = self.ins_outs();
-        let mut wires = HashMap::<usize, usize>::new(); // wire idx -> node id
+        let mut wires = HashMap::<usize, usize>::default(); // wire idx -> node id
 
         // ensure all inputs are in a subgraph at the same rank
         let mut inputs_subgraph_stmt
@@ -1491,7 +1482,7 @@ impl Diagram {
         inputs.sort();
         let mut prev: Option<usize> = None;
         for idx in inputs.into_iter() {
-            node_id = id_gen.get();
+            node_id = id_gen.next().unwrap();
             wires.insert(idx, node_id);
             inputs_subgraph_stmt
                 = inputs_subgraph_stmt.add_node(
@@ -1523,7 +1514,7 @@ impl Diagram {
             = statements.add_subgraph(SubGraph::cluster(inputs_subgraph_stmt));
 
         // add elements/wires
-        let mut u_idx = Id(0);
+        let mut u_idx = 0..;
         for elem in self.slices.iter() {
             match elem.kind {
                 ElementKind::Z(_)
@@ -1531,7 +1522,7 @@ impl Diagram {
                 | ElementKind::H(_)
                 | ElementKind::Unknown
                 => {
-                    node_id = id_gen.get();
+                    node_id = id_gen.next().unwrap();
                     let attrs
                         = match elem.kind {
                             ElementKind::Z(ph) => {
@@ -1565,8 +1556,11 @@ impl Diagram {
                                     .add_pair(fillcolor(H_COLOR))
                             },
                             ElementKind::Unknown => {
-                                let u_label = format!("U{}",
-                                    subscript_str(u_idx.get()));
+                                let u_label
+                                    = format!(
+                                        "U{}",
+                                        subscript_str(u_idx.next().unwrap())
+                                    );
                                 AttrList::new()
                                     .add_pair(label(u_label))
                                     .add_pair(shape(Shape::Rectangle))
@@ -1602,13 +1596,13 @@ impl Diagram {
                     wires.insert(w2, n1);
                 },
                 ElementKind::Cup(w1, w2) => {
-                    let n1 = id_gen.get();
+                    let n1 = id_gen.next().unwrap();
                     let attrs1
                         = AttrList::new().add_pair(style(Style::Invisible));
                     statements
                         = statements.add_node(n1.into(), None, Some(attrs1));
                     wires.insert(w1, n1);
-                    let n2 = id_gen.get();
+                    let n2 = id_gen.next().unwrap();
                     let attrs2
                         = AttrList::new().add_pair(style(Style::Invisible));
                     statements
@@ -1655,7 +1649,7 @@ impl Diagram {
         outputs.sort();
         let mut prev: Option<usize> = None;
         for idx in outputs.into_iter() {
-            node_id = id_gen.get();
+            node_id = id_gen.next().unwrap();
             outputs_subgraph_stmt
                 = outputs_subgraph_stmt.add_node(
                     node_id.into(),
@@ -1751,5 +1745,4 @@ impl fmt::Display for Diagram {
         Ok(())
     }
 }
-
 

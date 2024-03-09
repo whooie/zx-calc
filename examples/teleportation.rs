@@ -23,33 +23,42 @@ where F: FnMut() -> T
 fn main() -> anyhow::Result<()> {
     // results from measurements on Alice's wires
     const A: bool = false;
-    const B: bool = true;
+    const B: bool = false;
 
     // create the diagram
     // the dropped value is a hashmap of all node IDs
-    let (mut diagram, _) = diagram!(
+    let (mut diagram, nodes) = diagram!(
         nodes: {
             i = input [],
-            z = z [], // CNOT
-            x = x [], // |
+            bell0 = input [],
+            bell1 = input [],
+            cnotz = z [],
+            cnotx = x [],
             h = h [],
-            eff0 = X [f64::from(A) * PI],
-            eff1 = X [f64::from(B) * PI],
+            effect0 = output [],
+            effect1 = output [],
             corrx = X [f64::from(B) * PI],
             corrz = Z [f64::from(A) * PI],
             o = output [],
         },
         wires: {
-            i -- z,
-            z -- h,
-            h -- eff0,
-            z -- x,
-            x -- eff1,
-            x -- corrx,
+            i -- cnotz,
+            cnotz -- h,
+            h -- effect0,
+
+            bell0 -- cnotx,
+            cnotx -- effect1,
+
+            bell1 -- corrx,
             corrx -- corrz,
             corrz -- o,
+
+            cnotz -- cnotx,
         },
     )?;
+    diagram.apply_state(nodes["effect0"], Spider::X(f64::from(A) * PI))?;
+    diagram.apply_state(nodes["effect1"], Spider::X(f64::from(B) * PI))?;
+    diagram.apply_bell(nodes["bell0"], nodes["bell1"], None)?;
 
     // convert the default graph representation to a ket-bra representation
     print!("convert to ketbra ... ");
@@ -104,11 +113,14 @@ fn main() -> anyhow::Result<()> {
     // let (simps, t)
     //     = timeit(|| {
     //         vec![
-    //             diagram.simplify_bit_bialgebra(),
     //             diagram.simplify_fuse(),
     //             diagram.simplify_fuse(),
-    //             diagram.simplify_hopf(),
     //             diagram.simplify_identity(),
+    //             diagram.simplify_color_flip(),
+    //             diagram.simplify_fuse(),
+    //             diagram.simplify_fuse(),
+    //             diagram.simplify_identity(),
+    //             diagram.simplify_fuse(),
     //             diagram.simplify_identity(),
     //         ]
     //     });

@@ -5,7 +5,7 @@
 //! attached to its nodes.
 
 use std::{
-    collections::{ HashMap, HashSet, VecDeque },
+    collections::VecDeque,
     f64::consts::{ PI, FRAC_PI_2 as PI2, TAU },
     fs,
     io::Write,
@@ -14,6 +14,7 @@ use std::{
 };
 use num_complex::Complex64 as C64;
 use num_rational::Rational64 as R64;
+use rustc_hash::{ FxHashMap as HashMap, FxHashSet as HashSet };
 use thiserror::Error;
 use crate::ketbra;
 
@@ -298,6 +299,56 @@ impl Node {
             _ => false,
         }
     }
+
+    fn graph_attrs(&self) -> tabbycat::AttrList {
+        use tabbycat::*;
+        use tabbycat::attributes::*;
+        use crate::vizdefs::*;
+        match self {
+            Node::Z(ph) => {
+                let ph_label = format_phase(*ph);
+                AttrList::new()
+                    .add_pair(label(ph_label))
+                    .add_pair(shape(Shape::Circle))
+                    .add_pair(height(CIRCLE_HEIGHT))
+                    .add_pair(style(Style::Filled))
+                    .add_pair(fillcolor(Z_COLOR))
+            },
+            Node::X(ph) => {
+                let ph_label = format_phase(*ph);
+                AttrList::new()
+                    .add_pair(label(ph_label))
+                    .add_pair(shape(Shape::Circle))
+                    .add_pair(height(CIRCLE_HEIGHT))
+                    .add_pair(style(Style::Filled))
+                    .add_pair(fillcolor(X_COLOR))
+            },
+            Node::H(a) => {
+                let a_label
+                    = if self.has_defarg() {
+                        "".to_string()
+                    } else {
+                        format!("{}", a)
+                    };
+                AttrList::new()
+                    .add_pair(label(a_label))
+                    .add_pair(shape(Shape::Square))
+                    .add_pair(height(SQUARE_HEIGHT))
+                    .add_pair(style(Style::Filled))
+                    .add_pair(fillcolor(H_COLOR))
+            },
+            Node::Input(QubitId(qid)) => {
+                AttrList::new()
+                    .add_pair(label(format!("In {}", qid)))
+                    .add_pair(shape(Shape::Plaintext))
+            },
+            Node::Output(QubitId(qid)) => {
+                AttrList::new()
+                    .add_pair(label(format!("Out {}", qid)))
+                    .add_pair(shape(Shape::Plaintext))
+            },
+        }
+    }
 }
 
 /// A single spider.
@@ -305,6 +356,14 @@ impl Node {
 pub enum Spider {
     Z(f64),
     X(f64),
+}
+
+impl Spider {
+    /// A phaseless Z-spider.
+    pub fn z() -> Self { Self::Z(0.0) }
+
+    /// A phaseless X-spider.
+    pub fn x() -> Self { Self::X(0.0) }
 }
 
 impl From<Spider> for Node {
@@ -701,7 +760,9 @@ pub struct Diagram {
     wires_between: HashMap<Wire, HashSet<WireId>>,
     node_id: usize,
     input_counter: usize,
+    input_gens: HashMap<NodeId, QubitId>,
     output_counter: usize,
+    output_gens: HashMap<NodeId, QubitId>,
     edge_id: usize,
 }
 
@@ -713,13 +774,15 @@ impl Diagram {
     /// Create a new, empty diagram.
     pub fn new() -> Self {
         Self {
-            nodes: HashMap::new(),
-            wires: HashMap::new(),
-            wires_from: HashMap::new(),
-            wires_between: HashMap::new(),
+            nodes: HashMap::default(),
+            wires: HashMap::default(),
+            wires_from: HashMap::default(),
+            wires_between: HashMap::default(),
             node_id: 0,
             input_counter: 0,
+            input_gens: HashMap::default(),
             output_counter: 0,
+            output_gens: HashMap::default(),
             edge_id: 0,
         }
     }
@@ -834,9 +897,17 @@ impl Diagram {
                 },
             };
         self.nodes.insert(id.into(), node);
-        self.wires_from.insert(id.into(), HashSet::new());
+        self.wires_from.insert(id.into(), HashSet::default());
         self.node_id += 1;
         id.into()
+    }
+
+    fn remove_io_gen<Id>(&mut self, node_id: Id)
+    where Id: Into<NodeId>
+    {
+        let id = node_id.into();
+        self.input_gens.remove(&id);
+        self.output_gens.remove(&id);
     }
 
     /// Remove the node associated with a particular ID and return its data if
@@ -858,6 +929,7 @@ impl Diagram {
                 .for_each(|wires_btw| {
                     wire_ids.iter().for_each(|id| { wires_btw.remove(id); });
                 });
+            self.remove_io_gen(id);
             self.nodes.remove(&id)
         } else {
             None
@@ -914,24 +986,28 @@ impl Diagram {
         if let Some(wires_from_a) = self.wires_from.get_mut(&a) {
             wires_from_a.insert(id.into());
         } else {
-            self.wires_from.insert(a, [id.into()].into());
+            self.wires_from.insert(a, [id.into()].into_iter().collect());
         }
         if let Some(wires_from_b) = self.wires_from.get_mut(&b) {
             wires_from_b.insert(id.into());
         } else {
-            self.wires_from.insert(b, [id.into()].into());
+            self.wires_from.insert(b, [id.into()].into_iter().collect());
         }
         if let Some(wires_btw) = self.wires_between.get_mut(&Wire(a, b)) {
             wires_btw.insert(id.into());
         } else {
-            self.wires_between.insert(Wire(a, b), [id.into()].into());
+            self.wires_between.insert(
+                Wire(a, b), [id.into()].into_iter().collect());
         }
         if let Some(wires_btw) = self.wires_between.get_mut(&Wire(b, a)) {
             wires_btw.insert(id.into());
         } else {
-            self.wires_between.insert(Wire(b, a), [id.into()].into());
+            self.wires_between.insert(
+                Wire(b, a), [id.into()].into_iter().collect());
         }
         self.edge_id += 1;
+        self.remove_io_gen(a);
+        self.remove_io_gen(b);
         Ok(id.into())
     }
 
@@ -995,9 +1071,15 @@ impl Diagram {
         let id = node_id.into();
         if self.nodes.get(&id).is_some_and(|n| !n.is_generator()) {
             if let Some((int_id, _)) = self.neighbors_of(id).unwrap().next() {
-                self.remove_node(id);
                 let new_id = self.add_node(spider.into());
                 self.add_wire(int_id, new_id)?;
+                match self.remove_node(id) {
+                    Some(Node::Input(qid))
+                        => { self.input_gens.insert(new_id, qid); },
+                    Some(Node::Output(qid))
+                        => { self.output_gens.insert(new_id, qid); },
+                    _ => unreachable!(),
+                }
                 Ok(new_id)
             } else {
                 self.remove_node(id);
@@ -1044,22 +1126,44 @@ impl Diagram {
             .and_then(|mut neighbors| neighbors.next())
             .ok_or(GraphError::ApplyBellStateDisconnected(a.0))?
             .0;
+        let id_a: NodeId = self.add_node(NodeDef::Z(0.0));
+        self.add_wire(id_a, int_a).ok();
         let int_b: NodeId
             = self.neighbors_of(b)
             .and_then(|mut neighbors| neighbors.next())
             .ok_or(GraphError::ApplyBellStateDisconnected(b.0))?
             .0;
-        self.remove_node(a);
-        self.remove_node(b);
-        if let Some(spider) = phase {
-            let new_id = self.add_node(spider.into());
-            self.add_wire(int_a, new_id)?;
-            self.add_wire(int_b, new_id)?;
-            Ok(Some(new_id))
-        } else {
-            self.add_wire(int_a, int_b)?;
-            Ok(None)
+        let id_b: NodeId = self.add_node(NodeDef::Z(0.0));
+        self.add_wire(id_b, int_b).ok();
+        let maybe_spider_id
+            = if let Some(spider) = phase {
+                let new_id = self.add_node(spider.into());
+                self.add_wire(id_a, new_id)?;
+                self.add_wire(id_b, new_id)?;
+                Some(new_id)
+            } else {
+                self.add_wire(id_a, id_b)?;
+                None
+            };
+        match self.remove_node(a) {
+            Some(Node::Input(qid)) => {
+                self.input_gens.insert(id_a, qid);
+            },
+            Some(Node::Output(qid)) => {
+                self.output_gens.insert(id_a, qid);
+            },
+            _ => unreachable!(),
         }
+        match self.remove_node(b) {
+            Some(Node::Input(qid)) => {
+                self.input_gens.insert(id_b, qid);
+            },
+            Some(Node::Output(qid)) => {
+                self.output_gens.insert(id_b, qid);
+            },
+            _ => unreachable!(),
+        }
+        Ok(maybe_spider_id)
     }
 
     /// Remove the wire associated with a particular ID and return its endpoints
@@ -1077,7 +1181,13 @@ impl Diagram {
                 .for_each(|wires_from| { wires_from.remove(&id); });
             self.wires_between.values_mut()
                 .for_each(|wires_between| { wires_between.remove(&id); });
-            self.wires.remove(&id)
+            if let Some(wire) = self.wires.remove(&id) {
+                self.remove_io_gen(wire.0);
+                self.remove_io_gen(wire.1);
+                Some(wire)
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -1404,6 +1514,7 @@ impl Diagram {
                         => Node::X((ph1 + ph2) % TAU),
                     _ => unreachable!(),
                 };
+            self.remove_io_gen(s1);
             self.remove_node(s2);
             if let Some(node) = self.nodes.get_mut(&s1) { *node = new; }
             neighbors2.into_iter()
@@ -1445,6 +1556,8 @@ impl Diagram {
     /// joined by two wires.
     pub fn simplify_hopf(&mut self) -> bool {
         if let Some(Hopf(s1, s2)) = self.find_hopf() {
+            self.remove_io_gen(s1);
+            self.remove_io_gen(s2);
             let wires: Vec<WireId>
                 = self.wires_between(s1, s2).unwrap()
                 .collect();
@@ -1480,6 +1593,8 @@ impl Diagram {
     /// argument.
     pub fn simplify_h2hopf(&mut self) -> bool {
         if let Some(H2Hopf(s1, s2)) = self.find_h2hopf() {
+            self.remove_io_gen(s1);
+            self.remove_io_gen(s2);
             let hboxes: Vec<NodeId>
                 = self.neighbors_of(s1).unwrap()
                 .filter_map(|(id, node)| {
@@ -1528,6 +1643,7 @@ impl Diagram {
                     Node::X(ph) => Node::X((ph + PI) % TAU),
                     _ => unreachable!(),
                 };
+            self.remove_io_gen(s);
             self.remove_node(h);
             if let Some(node) = self.nodes.get_mut(&s) { *node = new; }
             true
@@ -1600,6 +1716,7 @@ impl Diagram {
             self.remove_node(s1);
             self.remove_node(s2);
             if let Some(node) = self.nodes.get_mut(&h) { *node = new; }
+            self.remove_io_gen(h);
             self.add_wire(neighbors[0], h).ok();
             self.add_wire(neighbors[1], h).ok();
             true
@@ -1628,6 +1745,8 @@ impl Diagram {
     /// wire by moving the H-box through the spider with fewer wires and fusing.
     pub fn simplify_hmove(&mut self) -> bool {
         if let Some(HMove(s1, h, s2)) = self.find_hmove() {
+            self.remove_io_gen(s1);
+            self.remove_io_gen(s2);
             self.remove_node(h);
             let neighbors1: Vec<NodeId>
                 = self.neighbors_of(s1).unwrap()
@@ -1722,6 +1841,7 @@ impl Diagram {
 
     fn do_color_flip(&mut self, color_flip: ColorFlip) {
         let ColorFlip(s) = color_flip;
+        self.remove_io_gen(s);
         let neighbors: Vec<(NodeId, bool)>
             = self.neighbors_of(s).unwrap()
             .filter_map(|(id, node)| {
@@ -1835,6 +1955,8 @@ impl Diagram {
     /// [`Self::simplify_hmove`].
     pub fn simplify_pi_commute(&mut self) -> bool {
         if let Some(PiCommute(s1, pi, s2)) = self.find_pi_commute() {
+            self.remove_io_gen(s1);
+            self.remove_io_gen(s2);
             let pi_def
                 = match self.nodes[&pi] {
                     Node::Z(_) => NodeDef::Z(PI),
@@ -1929,6 +2051,7 @@ impl Diagram {
 
     fn do_phase_neg(&mut self, phase_neg: PhaseNeg) {
         let PhaseNeg(s) = phase_neg;
+        self.remove_io_gen(s);
         let pi_def
             = match self.nodes[&s] {
                 Node::Z(_) => NodeDef::X(PI),
@@ -2142,6 +2265,7 @@ impl Diagram {
     pub fn simplify_istate(&mut self) -> bool {
         if let Some(IState(state, maybe_spider)) = self.find_istate() {
             if let Some(spider_id) = maybe_spider {
+                self.remove_io_gen(spider_id);
                 let state_node = self.remove_node(state).unwrap();
                 match (state_node, self.nodes.get_mut(&spider_id).unwrap()) {
                     (Node::Z(ph1), node) => match node {
@@ -2230,6 +2354,7 @@ impl Diagram {
                 = self.neighbors_of(h_end).unwrap()
                 .filter_map(|(id, _)| (id != h_mid).then_some(id))
                 .collect();
+            self.remove_io_gen(h_arg);
             self.remove_node(h_mid);
             self.remove_node(h_end);
             end_neighbors.into_iter()
@@ -2710,8 +2835,8 @@ impl Diagram {
 
         let mut elements: Vec<ketbra::Element>
             = Vec::with_capacity(nodes.len());
-        let mut visited: HashSet<NodeId>
-            = HashSet::with_capacity(nodes.len());
+        let mut visited: HashSet<NodeId> = HashSet::default();
+            // = HashSet::with_capacity(nodes.len());
         let qcount = self.input_counter.max(self.output_counter);
         let mut bell_wire = self.edge_id + qcount + 1..;
         let mut ins: Vec<usize>;
@@ -2920,8 +3045,8 @@ impl Diagram {
         // first step: all non-scalar nodes
         let mut elements: Vec<ketbra::Element>
             = Vec::with_capacity(self.nodes_inner().count());
-        let mut visited: HashSet<NodeId>
-            = HashSet::with_capacity(self.nodes_inner().count());
+        let mut visited: HashSet<NodeId> = HashSet::default();
+            // = HashSet::with_capacity(self.nodes_inner().count());
         // init with input nodes to make sure they're seen first
         let mut to_visit: VecDeque<(NodeId, Node)> = self.inputs().collect();
         as_ketbra_inner(self, &mut visited, &mut to_visit, &mut elements);
@@ -2947,7 +3072,7 @@ impl Diagram {
     pub fn to_graphviz(&self, name: &str) -> GraphResult<tabbycat::Graph> {
         use tabbycat::*;
         use tabbycat::attributes::*;
-        use crate::graphviz::*;
+        use crate::vizdefs::*;
         // initial declarations
         let mut statements
             = StmtList::new()
@@ -2970,21 +3095,30 @@ impl Diagram {
                 AttrType::Graph,
                 AttrList::new().add_pair(rank(RankType::Source)),
             );
-        let mut inputs: Vec<(NodeId, Node)> = self.inputs().collect();
+        let mut inputs: Vec<(NodeId, Node)>
+            = self.inputs()
+            .chain(
+                self.nodes_inner()
+                .filter(|(id, _)| self.input_gens.contains_key(id))
+            )
+            .collect();
         inputs.sort_by(|(l, _), (r, _)| l.cmp(r));
         let mut prev: Option<usize> = None;
         for (NodeId(id), node) in inputs.into_iter() {
-            let Node::Input(QubitId(index)) = node else { unreachable!() };
+            let index
+                = match node {
+                    Node::Input(QubitId(index)) => index,
+                    _ => self.input_gens[&NodeId(id)].0,
+                };
+            let attrs
+                = if node.is_generator() {
+                    node.graph_attrs()
+                        .add_pair(xlabel(format!("In {}", index)))
+                } else {
+                    node.graph_attrs()
+                };
             inputs_subgraph_stmt
-                = inputs_subgraph_stmt.add_node(
-                    id.into(),
-                    None,
-                    Some(
-                        AttrList::new()
-                            .add_pair(label(format!("In {}", index)))
-                            .add_pair(shape(Shape::Plaintext))
-                    ),
-                );
+                = inputs_subgraph_stmt.add_node(id.into(), None, Some(attrs));
             if let Some(prev_id) = prev {
                 inputs_subgraph_stmt
                     = inputs_subgraph_stmt.add_edge(
@@ -3008,21 +3142,30 @@ impl Diagram {
                 AttrType::Graph,
                 AttrList::new().add_pair(rank(RankType::Sink)),
             );
-        let mut outputs: Vec<(NodeId, Node)> = self.outputs().collect();
+        let mut outputs: Vec<(NodeId, Node)>
+            = self.outputs()
+            .chain(
+                self.nodes_inner()
+                .filter(|(id, _)| self.output_gens.contains_key(id))
+            )
+            .collect();
         outputs.sort_by(|(l, _), (r, _)| l.cmp(r));
         let mut prev: Option<usize> = None;
         for (NodeId(id), node) in outputs.into_iter() {
-            let Node::Output(QubitId(index)) = node else { unreachable!() };
+            let index
+                = match node {
+                    Node::Output(QubitId(index)) => index,
+                    _ => self.output_gens[&NodeId(id)].0,
+                };
+            let attrs
+                = if node.is_generator() {
+                    node.graph_attrs()
+                        .add_pair(xlabel(format!("Out {}", index)))
+                } else {
+                    node.graph_attrs()
+                };
             outputs_subgraph_stmt
-                = outputs_subgraph_stmt.add_node(
-                    id.into(),
-                    None,
-                    Some(
-                        AttrList::new()
-                            .add_pair(label(format!("Out {}", index)))
-                            .add_pair(shape(Shape::Plaintext))
-                    ),
-                );
+                = outputs_subgraph_stmt.add_node(id.into(), None, Some(attrs));
             if let Some(prev_id) = prev {
                 outputs_subgraph_stmt
                     = outputs_subgraph_stmt.add_edge(
@@ -3041,42 +3184,12 @@ impl Diagram {
             = statements.add_subgraph(SubGraph::cluster(outputs_subgraph_stmt));
         // add interior nodes
         for (NodeId(id), node) in self.nodes_inner() {
-            let attrs: AttrList
-                = match node {
-                    Node::Z(ph) => {
-                        let ph_label = format_phase(ph);
-                        AttrList::new()
-                            .add_pair(label(ph_label))
-                            .add_pair(shape(Shape::Circle))
-                            .add_pair(height(CIRCLE_HEIGHT))
-                            .add_pair(style(Style::Filled))
-                            .add_pair(fillcolor(Z_COLOR))
-                    },
-                    Node::X(ph) => {
-                        let ph_label = format_phase(ph);
-                        AttrList::new()
-                            .add_pair(label(ph_label))
-                            .add_pair(shape(Shape::Circle))
-                            .add_pair(height(CIRCLE_HEIGHT))
-                            .add_pair(style(Style::Filled))
-                            .add_pair(fillcolor(X_COLOR))
-                    },
-                    Node::H(a) => {
-                        let a_label
-                            = if node.has_defarg() {
-                                "".to_string()
-                            } else {
-                                format!("{}", a)
-                            };
-                        AttrList::new()
-                            .add_pair(label(a_label))
-                            .add_pair(shape(Shape::Square))
-                            .add_pair(height(SQUARE_HEIGHT))
-                            .add_pair(style(Style::Filled))
-                            .add_pair(fillcolor(H_COLOR))
-                    },
-                    Node::Input(_) | Node::Output(_) => unreachable!(),
-                };
+            if self.input_gens.contains_key(&NodeId(id))
+                || self.output_gens.contains_key(&NodeId(id))
+            {
+                continue;
+            }
+            let attrs = node.graph_attrs();
             statements = statements.add_node(id.into(), None, Some(attrs));
         }
         // add wires

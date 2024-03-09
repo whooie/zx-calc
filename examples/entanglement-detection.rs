@@ -25,12 +25,12 @@ where F: FnMut() -> T
 fn main() -> anyhow::Result<()> {
     // create the diagram
     // the dropped value is a hashmap of all node IDs
-    let (mut diagram, _) = diagram!(
+    let (mut diagram, nodes) = diagram!(
         nodes: {
-            i0 = x [],
-            i1 = x [],
-            i2 = x [],
-            i3 = x [],
+            i0 = input [],
+            i1 = input [],
+            i2 = input [],
+            i3 = input [],
             h0 = h [],
             h1 = h [],
             s0 = Z [PI / 2.0],
@@ -105,6 +105,10 @@ fn main() -> anyhow::Result<()> {
             cnot9z -- cnot9x,
         },
     )?;
+    diagram.apply_state(nodes["i0"], Spider::x())?;
+    diagram.apply_state(nodes["i1"], Spider::x())?;
+    diagram.apply_state(nodes["i2"], Spider::x())?;
+    diagram.apply_state(nodes["i3"], Spider::x())?;
 
     // both representations can be rendered as DOT language
     print!("save init graph to graphviz ... ");
