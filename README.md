@@ -23,14 +23,15 @@ reasoning about linear maps between two-level quantum states.
         - [x] "H2-Hopf" rule (identical colors with intervening H-boxes)
         - [x] Spider color change
         - [x] Remove self-loops with single H-boxes
-        - [x] "i-H-i sandwich" (Euler-angle expansion of an H-box between two
-          π/2 spiders)
+        - [x] Euler-angle expansion of an H-box between two spiders of the same
+          color
         - [x] Color-change and fuse for Z-H-X sandwiches
         - [x] π-commute and fuse for Z-X-Z/X-Z-X sandwiches
         - [x] Heuristic-based general reduction of H-boxes via color change
         - [x] Heuristic-based general reduction of π-spiders via π-commute
         - [ ] Bialgebra rule (partial: 2x2 case with nπ phases)
         - [x] State/effect copying
+        - [x] Equivalence of spider-states with ±π/2 phases
     - [ ] ZH rewrite rules
         - [x] H-box fusion
         - [x] π-state/effect absorption
@@ -54,6 +55,9 @@ reasoning about linear maps between two-level quantum states.
     - [ ] Render to Graphviz
     - [ ] Conversion to diagram representations
     - [ ] Circuit extraction from diagrams
+- [ ] Time/space optimization -- currently it takes ~7.5s on my laptop to fuse
+  10,000 spiders in the graph representation, and ketbra contraction is
+  embarassingly slow
 
 ## Helpful resources
 * B. Coecke, "Basic ZX-calculus for students and professionals."
