@@ -38,6 +38,7 @@ name = "zx_calc"
 
 [dev-dependencies]
 anyhow = "1.0.80"
+rand = "0.8.5"
 
 # [dependencies.ndarray-linalg]
 # version = "*"

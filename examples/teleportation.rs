@@ -19,6 +19,7 @@ where F: FnMut() -> T
 //              / ---X----- measurement B
 // ∣00⟩ + ∣11⟩ | 
 //              \ ---------(X if B)---(Z if A)--- ∣ψ⟩
+//
 fn main() -> anyhow::Result<()> {
     // results from measurements on Alice's wires
     const A: bool = false;
