@@ -8,7 +8,7 @@
 //! - [`ketbra`] computes the complete linear maps or end products represented
 //! by diagrams in the ZX(H)-calculus based on naive manipulation of [kets and
 //! bras][dirac-bra-ket].
-//! - [`graph`] implements many rewrite rules in the calculus using proper
+//! - [`mod@graph`] implements many rewrite rules in the calculus using proper
 //! graph-based representations, enabling automated diagram simplification.
 //!
 //! [wiki]: https://en.wikipedia.org/wiki/ZX-calculus

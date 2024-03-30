@@ -35,6 +35,9 @@ pub enum GraphError {
     #[error("error applying bell state/effect: input/output node {0} is disconnected")]
     ApplyBellStateDisconnected(usize),
 
+    #[error("error in composition: non-matching input/output qubit IDs")]
+    NonMatchingInputsOutputs,
+
     #[error("error constructing GraphViz representation: {0}")]
     GraphVizError(String),
 
@@ -42,6 +45,10 @@ pub enum GraphError {
     IOError(#[from] std::io::Error),
 }
 pub type GraphResult<T> = Result<T, GraphError>;
+
+fn fst<T, U>(pair: (T, U)) -> T { pair.0 }
+
+fn snd<T, U>(pair: (T, U)) -> U { pair.1 }
 
 /// A definition for a single node in a diagram.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -919,15 +926,15 @@ impl Diagram {
     {
         let id = node_id.into();
         if let Some(wires_from) = self.wires_from(id) {
-            let wire_ids: Vec<WireId> = wires_from.map(|(id, _)| id).collect();
+            let wire_ids: Vec<WireId> = wires_from.map(fst).collect();
             wire_ids.iter().for_each(|id| { self.wires.remove(id); });
             self.wires_from.values_mut()
                 .for_each(|wires_from| {
                     wire_ids.iter().for_each(|id| { wires_from.remove(id); });
                 });
             self.wires_between.values_mut()
-                .for_each(|wires_btw| {
-                    wire_ids.iter().for_each(|id| { wires_btw.remove(id); });
+                .for_each(|wires_btwn| {
+                    wire_ids.iter().for_each(|id| { wires_btwn.remove(id); });
                 });
             self.remove_io_gen(id);
             self.nodes.remove(&id)
@@ -993,14 +1000,14 @@ impl Diagram {
         } else {
             self.wires_from.insert(b, [id.into()].into_iter().collect());
         }
-        if let Some(wires_btw) = self.wires_between.get_mut(&Wire(a, b)) {
-            wires_btw.insert(id.into());
+        if let Some(wires_btwn) = self.wires_between.get_mut(&Wire(a, b)) {
+            wires_btwn.insert(id.into());
         } else {
             self.wires_between.insert(
                 Wire(a, b), [id.into()].into_iter().collect());
         }
-        if let Some(wires_btw) = self.wires_between.get_mut(&Wire(b, a)) {
-            wires_btw.insert(id.into());
+        if let Some(wires_btwn) = self.wires_between.get_mut(&Wire(b, a)) {
+            wires_btwn.insert(id.into());
         } else {
             self.wires_between.insert(
                 Wire(b, a), [id.into()].into_iter().collect());
@@ -1446,7 +1453,7 @@ impl Diagram {
                 Identity::Spider(s) => {
                     let neighbors: Vec<NodeId>
                         = self.neighbors_of(s).unwrap()
-                        .map(|(id, _)| id)
+                        .map(fst)
                         .collect();
                     self.remove_node(s);
                     self.add_wire(neighbors[0], neighbors[1]).ok();
@@ -1914,7 +1921,7 @@ impl Diagram {
                 }
             })
             .min_by(|(_, score_l), (_, score_r)| score_l.cmp(score_r))
-            .map(|(id, _)| id);
+            .map(fst);
         if let Some(id) = spider {
             self.do_color_flip(ColorFlip(id));
             true
@@ -1966,11 +1973,11 @@ impl Diagram {
             self.remove_node(pi);
             let neighbors1: Vec<NodeId>
                 = self.neighbors_of(s1).unwrap()
-                .map(|(id, _)| id)
+                .map(fst)
                 .collect();
             let neighbors2: Vec<NodeId>
                 = self.neighbors_of(s2).unwrap()
-                .map(|(id, _)| id)
+                .map(fst)
                 .collect();
             let (s, add_pi_wire, add_wire, self_loops)
                 : (NodeId, Vec<NodeId>, Vec<NodeId>, usize)
@@ -2135,7 +2142,7 @@ impl Diagram {
                 }
             })
             .min_by(|(_, score_l), (_, score_r)| score_l.cmp(score_r))
-            .map(|(id, _)| id);
+            .map(fst);
         if let Some(id) = center {
             self.do_phase_neg(PhaseNeg(id));
             true
@@ -2517,7 +2524,7 @@ impl Diagram {
         if let Some(HMultiState(h)) = self.find_hmultistate() {
             let neighbors: Vec<NodeId>
                 = self.neighbors_of(h).unwrap()
-                .map(|(id, _)| id)
+                .map(fst)
                 .collect();
             self.remove_node(h);
             neighbors.into_iter()
@@ -2914,6 +2921,352 @@ impl Diagram {
         self.find_scalar_nodes()
             .into_iter()
             .for_each(|(id, _)| { self.remove_node(id); });
+    }
+
+    /// Create a copy of `self` with swapped inputs and outputs, the signs of
+    /// all spiders' phases flipped, and all H-boxes' arguments conjugated.
+    pub fn adjoint(&self) -> Self {
+        self.clone().into_adjoint()
+    }
+
+    /// Swap inputs and outputs, flip the signs of all spiders' phases, and
+    /// conjugate all H-boxes' arguments, consuming `self`.
+    pub fn into_adjoint(mut self) -> Self {
+        self.adjoint_mut();
+        self
+    }
+
+    /// Swap inputs and outputs, flip the signs of all spiders' phases, and
+    /// conjugate all H-boxes' arguments, modifying `self` in place.
+    pub fn adjoint_mut(&mut self) -> &mut Self {
+        for node in self.nodes.values_mut() {
+            *node
+                = match node {
+                    Node::Z(ph) => Node::Z((-*ph).rem_euclid(TAU)),
+                    Node::X(ph) => Node::X((-*ph).rem_euclid(TAU)),
+                    Node::H(a) => Node::H(a.conj()),
+                    Node::Input(qid) => Node::Output(*qid),
+                    Node::Output(qid) => Node::Input(*qid),
+                };
+        }
+        self
+    }
+
+    fn shifted_ids(
+        self,
+        sh_nodes: usize,
+        sh_inputs: usize,
+        sh_outputs: usize,
+        sh_edges: usize,
+    ) -> Self
+    {
+        let Self {
+            nodes,
+            wires,
+            wires_from,
+            wires_between,
+            mut node_id,
+            mut input_counter,
+            input_gens,
+            mut output_counter,
+            output_gens,
+            mut edge_id,
+        } = self;
+        let nodes: HashMap<NodeId, Node>
+            = nodes.into_iter()
+            .map(|(NodeId(id), node)| (NodeId(id + sh_nodes), node))
+            .collect();
+        let wires: HashMap<WireId, Wire>
+            = wires.into_iter()
+            .map(|(WireId(id), Wire(NodeId(a), NodeId(b)))| {
+                (
+                    WireId(id + sh_edges),
+                    Wire(NodeId(a + sh_nodes), NodeId(b + sh_nodes)),
+                )
+            })
+            .collect();
+        let wires_from: HashMap<NodeId, HashSet<WireId>>
+            = wires_from.into_iter()
+            .map(|(NodeId(id), wires_from)| {
+                (
+                    NodeId(id + sh_nodes),
+                    wires_from.into_iter()
+                        .map(|WireId(wid)| WireId(wid + sh_edges))
+                        .collect(),
+                )
+            })
+            .collect();
+        let wires_between: HashMap<Wire, HashSet<WireId>>
+            = wires_between.into_iter()
+            .map(|(Wire(NodeId(a), NodeId(b)), wires_btwn)| {
+                (
+                    Wire(NodeId(a + sh_nodes), NodeId(b + sh_nodes)),
+                    wires_btwn.into_iter()
+                        .map(|WireId(wid)| WireId(wid + sh_edges))
+                        .collect(),
+                )
+            })
+            .collect();
+        let input_gens: HashMap<NodeId, QubitId>
+            = input_gens.into_iter()
+            .map(|(NodeId(id), QubitId(qid))| {
+                (NodeId(id + sh_nodes), QubitId(qid + sh_inputs))
+            })
+            .collect();
+        let output_gens: HashMap<NodeId, QubitId>
+            = output_gens.into_iter()
+            .map(|(NodeId(id), QubitId(qid))| {
+                (NodeId(id + sh_nodes), QubitId(qid + sh_outputs))
+            })
+            .collect();
+        node_id += sh_nodes;
+        input_counter += sh_inputs;
+        output_counter += sh_outputs;
+        edge_id += sh_edges;
+        Self {
+            nodes,
+            wires,
+            wires_from,
+            wires_between,
+            node_id,
+            input_counter,
+            input_gens,
+            output_counter,
+            output_gens,
+            edge_id,
+        }
+    }
+
+    fn append_shifted(
+        &mut self,
+        sh_nodes: usize,
+        sh_inputs: usize,
+        sh_outputs: usize,
+        sh_edges: usize,
+        other: Self
+    ) {
+        let Diagram {
+            nodes,
+            wires,
+            wires_from,
+            wires_between,
+            node_id,
+            input_counter,
+            input_gens,
+            output_counter,
+            output_gens,
+            edge_id,
+        } = other.shifted_ids(
+            sh_nodes,
+            sh_inputs,
+            sh_outputs,
+            sh_edges,
+        );
+        nodes.into_iter()
+            .for_each(|(nid, node)| { self.nodes.insert(nid, node); });
+        wires.into_iter()
+            .for_each(|(wid, wire)| { self.wires.insert(wid, wire); });
+        wires_from.into_iter()
+            .for_each(|(nid, wids)| { self.wires_from.insert(nid, wids); });
+        wires_between.into_iter()
+            .for_each(|(wire, wids)| { self.wires_between.insert(wire, wids); });
+        input_gens.into_iter()
+            .for_each(|(nid, qid)| { self.input_gens.insert(nid, qid); });
+        output_gens.into_iter()
+            .for_each(|(nid, qid)| { self.output_gens.insert(nid, qid); });
+        self.node_id = node_id;
+        self.input_counter = input_counter;
+        self.output_counter = output_counter;
+        self.edge_id = edge_id;
+    }
+
+    /// Return the tensor product of `self` and `other`.
+    ///
+    /// The IDs of all nodes and wires in `other` will be adjusted to avoid
+    /// collision.
+    pub fn tensor(&self, other: &Self) -> Self {
+        self.clone().into_tensor(other.clone())
+    }
+
+    /// Return the tensor product of `self` and `other`, consuming both.
+    ///
+    /// The IDs of all nodes and wires in `other` will be adjusted to avoid
+    /// collision.
+    pub fn into_tensor(mut self, other: Self) -> Self {
+        self.tensor_with(other);
+        self
+    }
+
+    /// Compute the tensor product of `self` and `other`, consuming `other` and
+    /// modifying `self` in place.
+    ///
+    /// The IDs of all nodes and wires in `other` will be adjusted to avoid
+    /// collision.
+    pub fn tensor_with(&mut self, other: Self) -> &mut Self {
+        self.append_shifted(
+            self.node_id,
+            self.input_counter,
+            self.output_counter,
+            self.edge_id,
+            other,
+        );
+        self
+    }
+
+    /// Return the composition `self ∘ other`, attempting to match the outputs
+    /// of `other` to the inputs of `self` by [qubit ID][QubitId].
+    ///
+    /// The IDs of all nodes and wires in `other` will be adjusted to avoid
+    /// collision.
+    ///
+    /// This operation will fail if inputs and outputs do not match exactly.
+    ///
+    /// See also [`compose_rev`][Self::compose_rev].
+    pub fn compose(&self, other: &Self) -> GraphResult<Self> {
+        self.clone().into_compose(other.clone())
+    }
+
+    /// Return the composition `self ∘ other`, attempting to match the outputs
+    /// of `other` to the inputs of `self` by [qubit ID][QubitId], consuming
+    /// both.
+    ///
+    /// The IDs of all nodes and wires in `other` will be adjusted to avoid
+    /// collision.
+    ///
+    /// This operation will fail if inputs and outputs do not match exactly.
+    ///
+    /// See also [`into_compose_rev`][Self::into_compose_rev].
+    pub fn into_compose(mut self, other: Self) -> GraphResult<Self> {
+        self.compose_with(other)?;
+        Ok(self)
+    }
+
+    /// Compute the composition `self ∘ other`, attempting to match the outputs
+    /// of `other` to the inputs of `self` by [qubit ID][QubitId], consuming
+    /// `other` and modifying `self` in place.
+    ///
+    /// The IDs of all nodes and wires in `other` will be adjusted to avoid
+    /// collision.
+    ///
+    /// This operation will fail if input and output qubit IDs do not match
+    /// exactly.
+    ///
+    /// See also [`compose_with_rev`][Self::compose_with_rev].
+    pub fn compose_with(&mut self, other: Self) -> GraphResult<&mut Self> {
+        let self_inputs: HashMap<usize, NodeId>
+            = self.inputs()
+            .map(|(id, node)| {
+                let Node::Input(QubitId(qid)) = node else { unreachable!() };
+                (qid, id)
+            })
+            .collect();
+        let self_input_qids: HashSet<&usize> = self_inputs.keys().collect();
+        let other_outputs: HashMap<usize, NodeId>
+            = other.outputs()
+            .map(|(id, node)| {
+                let Node::Output(QubitId(qid)) = node else { unreachable!() };
+                (qid, id)
+            })
+            .collect();
+        let other_output_qids: HashSet<&usize> = other_outputs.keys().collect();
+        if self_input_qids != other_output_qids {
+            return Err(GraphError::NonMatchingInputsOutputs);
+        }
+        let join_io: HashSet<(NodeId, NodeId)>
+            = self_inputs.into_iter()
+            .map(|(qid, in_id)| {
+                (in_id, NodeId(*other_outputs[&qid] + self.node_id))
+            })
+            .collect();
+        self.append_shifted(self.node_id, 0, 0, self.edge_id, other);
+        for (in_id, out_id) in join_io.into_iter() {
+            let in_neighbor
+                = self.neighbors_of(in_id).unwrap().next().unwrap().0;
+            let out_neighbor
+                = self.neighbors_of(out_id).unwrap().next().unwrap().0;
+            self.remove_node(in_id);
+            self.remove_node(out_id);
+            self.add_wire(in_neighbor, out_neighbor).ok();
+        }
+        Ok(self)
+    }
+
+    /// Return the composition `other ∘ self`, attempting to match the outputs
+    /// of `self` to the inputs of `other` by [qubit ID][QubitId].
+    ///
+    /// The IDs of all nodes and wires in `other` will be adjusted to avoid
+    /// collision.
+    ///
+    /// This operation will fail if inputs and outputs do not match exactly.
+    ///
+    /// See also [`compose`][Self::compose].
+    pub fn compose_rev(&self, other: &Self) -> GraphResult<Self> {
+        self.clone().into_compose_rev(other.clone())
+    }
+
+    /// Return the composition `other ∘ self`, attempting to match the outputs
+    /// of `self` to the inputs of `other` by [qubit ID][QubitId], consuming
+    /// both.
+    ///
+    /// The IDs of all nodes and wires in `other` will be adjusted to avoid
+    /// collision.
+    ///
+    /// This operation will fail if inputs and outputs do not match exactly.
+    ///
+    /// See also [`into_compose`][Self::into_compose].
+    pub fn into_compose_rev(mut self, other: Self) -> GraphResult<Self> {
+        self.compose_with_rev(other)?;
+        Ok(self)
+    }
+
+    /// Compute the composition `other ∘ self`, attempting to match the outputs
+    /// of `self` to the inputs of `other` by [qubit ID][QubitId], consuming
+    /// `other` and modifying `self` in place.
+    ///
+    /// The IDs of all nodes and wires in `other` will be adjusted to avoid
+    /// collision.
+    ///
+    /// This operation will fail if input and output qubit IDs do not match
+    /// exactly.
+    ///
+    /// See also [`compose_with`][Self::compose_with].
+    pub fn compose_with_rev(&mut self, other: Self) -> GraphResult<&mut Self> {
+        let self_outputs: HashMap<usize, NodeId>
+            = self.outputs()
+            .map(|(id, node)| {
+                let Node::Input(QubitId(qid)) = node else { unreachable!() };
+                (qid, id)
+            })
+            .collect();
+        let self_output_qids: HashSet<&usize> = self_outputs.keys().collect();
+        let other_inputs: HashMap<usize, NodeId>
+            = other.inputs()
+            .map(|(id, node)| {
+                let Node::Output(QubitId(qid)) = node else { unreachable!() };
+                (qid, id)
+            })
+            .collect();
+        let other_input_qids: HashSet<&usize> = other_inputs.keys().collect();
+        if self_output_qids != other_input_qids {
+            return Err(GraphError::NonMatchingInputsOutputs);
+        }
+        let join_io: HashSet<(NodeId, NodeId)>
+            = other_inputs.into_iter()
+            .map(|(qid, in_id)| {
+                (in_id, NodeId(*self_outputs[&qid] + self.node_id))
+            })
+            .collect();
+        self.append_shifted(self.node_id, 0, 0, self.edge_id, other);
+        for (in_id, out_id) in join_io.into_iter() {
+            let in_neighbor
+                = self.neighbors_of(in_id).unwrap().next().unwrap().0;
+            let out_neighbor
+                = self.neighbors_of(out_id).unwrap().next().unwrap().0;
+            self.remove_node(in_id);
+            self.remove_node(out_id);
+            self.add_wire(in_neighbor, out_neighbor).ok();
+        }
+        Ok(self)
     }
 
     /// Convert `self` to a [`ketbra::Diagram`] representation.
@@ -3514,10 +3867,10 @@ impl<'a> Iterator for NeighborsInner<'a> {
 /// is equivalent to
 /// ```
 /// # use zx_calc::graph::*;
-/// use zx_calc::diagram;
+/// use zx_calc::graph;
 /// use std::f64::consts::PI;
 ///
-/// diagram!(
+/// graph!(
 ///     nodes: {
 ///         i = input [],
 ///         o = output [],
@@ -3545,7 +3898,7 @@ impl<'a> Iterator for NeighborsInner<'a> {
 /// }
 /// ```
 #[macro_export]
-macro_rules! diagram {
+macro_rules! graph {
     (
         nodes: {
             $( $node_name:ident = $node_def:ident [$( $arg:expr ),* $(,)?] ),*

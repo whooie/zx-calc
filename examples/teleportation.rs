@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
 
     // create the diagram
     // the dropped value is a hashmap of all node IDs
-    let (mut diagram, nodes) = diagram!(
+    let (mut diagram, nodes) = graph!(
         nodes: {
             i = input [],
             bell0 = input [],
