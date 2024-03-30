@@ -1,6 +1,7 @@
 # zx-calc
 
-*WARNING: This project is in a very early state!*
+*WARNING: This project is in a very early state! Main tools are usable (see
+the list of features below), but may be buggy and/or error-prone.*
 
 Contains tools for working in the ZX-calculus, a diagrammatic language for
 reasoning about linear maps between two-level quantum states.
@@ -55,9 +56,7 @@ reasoning about linear maps between two-level quantum states.
     - [ ] Render to Graphviz
     - [ ] Conversion to diagram representations
     - [ ] Circuit extraction from diagrams
-- [ ] Time/space optimization -- currently it takes ~7.5s on my laptop to fuse
-  10,000 spiders in the graph representation, and ketbra contraction is
-  embarassingly slow
+- [ ] Time/space optimization
 
 ## Helpful resources
 * B. Coecke, "Basic ZX-calculus for students and professionals."
