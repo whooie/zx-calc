@@ -1182,11 +1182,6 @@ impl fmt::Display for Element {
     }
 }
 
-// #[derive(Clone, Debug, PartialEq)]
-// pub struct Matrix {
-//     array: nd::Array2<C64>,
-//     rows: 
-
 /// Represents a series of [`Element`]s as "slices" of a ZX-diagram, each of
 /// whose inputs and outputs locally span the entire lateral space of wires,
 /// (i.e. such that every element's output wires match the input wires of the
