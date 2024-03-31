@@ -1578,19 +1578,19 @@ impl Diagram {
     }
 
     fn find_h2hopf(&self) -> Option<H2Hopf> {
-        let n0 = |_: &Diagram, _: &NodePath, _: &NodeId, n: &Node| {
+        fn n0(_: &Diagram, _: &NodePath, _: &NodeId, n: &Node) -> bool {
             n.is_z() || n.is_x()
-        };
-        let n1 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n1(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_h() && n.has_defarg() && dg.arity(id).unwrap() == 2
-        };
-        let n2 = |_: &Diagram, p: &NodePath, _: &NodeId, n: &Node| {
+        }
+        fn n2(_: &Diagram, p: &NodePath, _: &NodeId, n: &Node) -> bool {
             n.is_same_color(&p[0].1)
-        };
-        let n3 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n3(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_h() && n.has_defarg() && dg.arity(id).unwrap() == 2
-                && dg.mutual_arity(id, p[0].0).is_some_and(|deg| deg == 1)
-        };
+                && dg.mutual_arity(id, p[0].0).unwrap() == 1
+        }
         self.find_path(self.nodes_inner(), &[n0, n1, n2, n3], Vec::new())
             .map(|path| H2Hopf(path[0].0, path[2].0))
     }
@@ -1660,15 +1660,15 @@ impl Diagram {
     }
 
     fn find_h_euler(&self) -> Option<HEuler> {
-        let n0 = |_: &Diagram, _: &NodePath, _: &NodeId, n: &Node| {
+        fn n0(_: &Diagram, _: &NodePath, _: &NodeId, n: &Node) -> bool {
             n.is_spider()
-        };
-        let n1 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n1(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_h() && n.has_defarg() && dg.arity(id).unwrap() == 2
-        };
-        let n2 = |_: &Diagram, p: &NodePath, _: &NodeId, n: &Node| {
+        }
+        fn n2(_: &Diagram, p: &NodePath, _: &NodeId, n: &Node) -> bool {
             n.is_same_color(&p[0].1)
-        };
+        }
         self.find_path(self.nodes_inner(), &[n0, n1, n2], Vec::new())
             .map(|path| HEuler(path[0].0, path[1].0, path[2].0))
     }
@@ -1733,17 +1733,17 @@ impl Diagram {
     }
 
     fn find_hmove(&self) -> Option<HMove> {
-        let n0 = |_: &Diagram, _: &NodePath, _: &NodeId, n: &Node| {
+        fn n0(_: &Diagram, _: &NodePath, _: &NodeId, n: &Node) -> bool {
             n.is_z() || n.is_x()
-        };
-        let n1 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n1(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_h() && n.has_defarg()
                 && dg.mutual_arity(id, p[0].0).unwrap() == 1
-        };
-        let n2 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n2(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             ((p[0].1.is_z() && n.is_x()) || (p[0].1.is_x() && n.is_z()))
                 && dg.mutual_arity(id, p[1].0).unwrap() == 1
-        };
+        }
         self.find_path(self.nodes_inner(), &[n0, n1, n2], Vec::new())
             .map(|path| HMove(path[0].0, path[1].0, path[2].0))
     }
@@ -1942,18 +1942,18 @@ impl Diagram {
     }
 
     fn find_pi_commute(&self) -> Option<PiCommute> {
-        let n0 = |_: &Diagram, _: &NodePath, _: &NodeId, n: &Node| {
+        fn n0(_: &Diagram, _: &NodePath, _: &NodeId, n: &Node) -> bool {
             n.is_z() || n.is_x()
-        };
-        let n1 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n1(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             p[0].1.is_diff_color_and(n, |_, ph| phase_eq(ph, PI))
                 && dg.mutual_arity(id, p[0].0).unwrap() == 1
-        };
-        let n2 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n2(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             p[0].1.is_same_color(n)
                 && dg.mutual_arity(id, p[1].0).unwrap() == 1
                 && dg.mutual_arity(id, p[0].0).unwrap() == 0
-        };
+        }
         self.find_path(self.nodes_inner(), &[n0, n1, n2], Vec::new())
             .map(|path| PiCommute(path[0].0, path[1].0, path[2].0))
     }
@@ -2182,28 +2182,28 @@ impl Diagram {
     }
 
     fn find_bit_bialgebra(&self) -> Option<BitBiAlgebra> {
-        let n0 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        fn n0(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_z_and(|ph| ph.rem_euclid(PI) < EPSILON)
                 && dg.arity(id).unwrap() == 3
-        };
-        let n1 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n1(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_x_and(|ph| ph.rem_euclid(PI) < EPSILON)
                 && dg.arity(id).unwrap() == 3
                 && dg.mutual_arity(p[0].0, id).unwrap() == 1
-        };
-        let n2 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n2(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_z_and(|ph| ph.rem_euclid(PI) < EPSILON)
                 && dg.arity(id).unwrap() == 3
                 && dg.mutual_arity(p[1].0, id).unwrap() == 1
                 && n.is_same_color_and(&p[0].1, phase_eq)
-        };
-        let n3 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n3(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_x_and(|ph| ph.rem_euclid(PI) < EPSILON)
                 && dg.arity(id).unwrap() == 3
                 && dg.mutual_arity(p[2].0, id).unwrap() == 1
                 && dg.mutual_arity(p[0].0, id).unwrap() == 1
                 && n.is_same_color_and(&p[1].1, phase_eq)
-        };
+        }
         self.find_path(self.nodes_inner(), &[n0, n1, n2, n3], Vec::new())
             .map(|p| BitBiAlgebra(p[0].0, p[2].0, p[1].0, p[3].0))
     }
@@ -2307,14 +2307,14 @@ impl Diagram {
     }
 
     fn find_state_copy(&self) -> Option<StateCopy> {
-        let n0 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        fn n0(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_spider_and(|ph| ph.rem_euclid(PI) < EPSILON)
                 && dg.arity(id).unwrap() == 1
-        };
-        let n1 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n1(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_diff_color(&p[0].1)
                 && dg.arity(id).unwrap() >= 2
-        };
+        }
         self.find_path(self.nodes_inner(), &[n0, n1], Vec::new())
             .map(|p| StateCopy(p[0].0, p[1].0))
     }
@@ -2341,15 +2341,15 @@ impl Diagram {
     }
 
     fn find_hfuse(&self) -> Option<HFuse> {
-        let n0 = |_: &Diagram, _: &NodePath, _: &NodeId, n: &Node| {
+        fn n0(_: &Diagram, _: &NodePath, _: &NodeId, n: &Node) -> bool {
             n.is_h()
-        };
-        let n1 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n1(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_h() && n.has_defarg() && dg.arity(id).unwrap() == 2
-        };
-        let n2 = |_: &Diagram, _: &NodePath, _: &NodeId, n: &Node| {
+        }
+        fn n2(_: &Diagram, _: &NodePath, _: &NodeId, n: &Node) -> bool {
             n.is_h() && n.has_defarg()
-        };
+        }
         self.find_path(self.nodes_inner(), &[n0, n1, n2], Vec::new())
             .map(|p| HFuse(p[0].0, p[1].0, p[2].0))
     }
@@ -2473,15 +2473,15 @@ impl Diagram {
     }
 
     fn find_hstate_copy(&self) -> Option<HStateCopy> {
-        let n0 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        fn n0(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             (
                 n.is_h_and(|a| a == (-1.0).into())
                 || n.is_z_and(|ph| phase_eq(ph, PI))
             ) && dg.arity(id).unwrap() == 1
-        };
-        let n1 = |_: &Diagram, _: &NodePath, _: &NodeId, n: &Node| {
+        }
+        fn n1(_: &Diagram, _: &NodePath, _: &NodeId, n: &Node) -> bool {
             n.is_h_and(|a| a == (-1.0).into())
-        };
+        }
         self.find_path(self.nodes_inner(), &[n0, n1], Vec::new())
             .map(|path| HStateCopy(path[0].0, path[1].0))
     }
@@ -2539,14 +2539,14 @@ impl Diagram {
     }
 
     fn find_hhopf(&self) -> Option<HHopf> {
-        let n0 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        fn n0(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_z_and(|ph| phase_eq(ph, 0.0)) && dg.arity(id).unwrap() == 3
-        };
-        let n1 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n1(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_h_and(|a| a == (-1.0).into())
                 && dg.arity(id).unwrap() == 3
                 && dg.mutual_arity(id, p[0].0).unwrap() == 2
-        };
+        }
         self.find_path(self.nodes_inner(), &[n0, n1], Vec::new())
             .map(|path| HHopf(path[0].0, path[1].0))
     }
@@ -2581,22 +2581,22 @@ impl Diagram {
     }
 
     fn find_havg(&self) -> Option<HAvg> {
-        let n0 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        fn n0(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_x_and(|ph| phase_eq(ph, PI))
                 && dg.arity(id).unwrap() == 2
-        };
-        let n1 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n1(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_h() && dg.arity(id).unwrap() == 2
-        };
-        let n2 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n2(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_z_and(|ph| phase_eq(ph, 0.0))
                 && dg.arity(id).unwrap() == 3
-        };
-        let n3 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n3(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_h()
                 && dg.arity(id).unwrap() == 2
                 && dg.mutual_arity(id, p[0].0).unwrap() == 1
-        };
+        }
         self.find_path(self.nodes_inner(), &[n0, n1, n2, n3], Vec::new())
             .map(|p| HAvg(p[0].0, p[1].0, p[3].0, p[2].0))
     }
@@ -2679,26 +2679,26 @@ impl Diagram {
     }
 
     fn find_hintro(&self) -> Option<HIntro> {
-        let n0 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        fn n0(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_z_and(|ph| phase_eq(ph, 0.0))
                 && dg.arity(id).unwrap() == 3
-        };
-        let n1 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n1(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_x_and(|ph| phase_eq(ph, PI))
                 && dg.arity(id).unwrap() == 2
-        };
-        let n2 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n2(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_h() && dg.arity(id).unwrap() == 2
-        };
-        let n3 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n3(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_z_and(|ph| phase_eq(ph, 0.0))
                 && dg.arity(id).unwrap() == 3
-        };
-        let n4 = |dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node| {
+        }
+        fn n4(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n == &p[2].1
                 && dg.arity(id).unwrap() == 2
                 && dg.mutual_arity(id, p[0].0).unwrap() == 1
-        };
+        }
         self.find_path(self.nodes_inner(), &[n0, n1, n2, n3, n4], Vec::new())
             .map(|p| HIntro(p[0].0, p[1].0, p[2].0, p[4].0, p[3].0))
     }
