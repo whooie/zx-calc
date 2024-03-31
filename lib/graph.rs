@@ -690,11 +690,11 @@ struct HFuse(NodeId, NodeId, NodeId);
 struct HAbsorb(Vec<NodeId>);
 //     HAbsorb(pi x-states)
 
-/// An H-box of arbitrary arity and argument connected to a single phaseless
-/// X-state/effect.
+/// An H-box of arbitrary arity and argument connected to any number of
+/// phaseless X-states/effects.
 #[derive(Clone, Debug)]
-struct HExplode(NodeId, NodeId);
-//     HExplode(state,  hbox)
+struct HExplode(Vec<NodeId>, NodeId);
+//     HExplode(0pi x-states, hbox)
 
 /// An H-box of arity 1 with argument ±1.
 #[derive(Copy, Clone, Debug)]
@@ -2405,27 +2405,35 @@ impl Diagram {
     }
 
     fn find_hexplode(&self) -> Option<HExplode> {
-        let n0 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
-            n.is_x_and(|ph| phase_eq(ph, 0.0))
-                && dg.arity(id).unwrap() == 1
-        };
-        let n1 = |dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node| {
-            n.is_h() && dg.arity(id).unwrap() > 2
-        };
-        self.find_path(self.nodes_inner(), &[n0, n1], Vec::new())
-            .map(|path| HExplode(path[0].0, path[1].0))
+        for (id, node) in self.nodes() {
+            if node.is_h() && self.arity(id).unwrap() > 2 {
+                let zero_states: Vec<NodeId>
+                    = self.neighbors_of(id).unwrap()
+                    .filter_map(|(id2, node2)| {
+                        (
+                            node2.is_x_and(|ph| phase_eq(ph, 0.0))
+                            && self.arity(id2).unwrap() == 1
+                        ).then_some(id2)
+                    })
+                    .collect();
+                if !zero_states.is_empty() {
+                    return Some(HExplode(zero_states, id));
+                }
+            }
+        }
+        None
     }
 
-    /// Simplify by exploding a single phaseless X-state/effect through a
-    /// neighboring H-box with arbitrary arity and argument.
+    /// Simplify by exploding phaseless X-states/effects through a neighboring
+    /// H-box with arbitrary arity and argument as phaseless Z-states/effects.
     pub fn simplify_hexplode(&mut self) -> bool {
-        if let Some(HExplode(state, h)) = self.find_hexplode() {
+        if let Some(HExplode(states, h)) = self.find_hexplode() {
             let neighbors: Vec<NodeId>
                 = self.neighbors_of(h).unwrap()
-                .filter_map(|(id, _)| (id != state).then_some(id))
+                .filter_map(|(id, _)| (!states.contains(&id)).then_some(id))
                 .collect();
-            self.remove_node(state);
             self.remove_node(h);
+            states.into_iter().for_each(|id| { self.remove_node(id); });
             for id in neighbors.into_iter() {
                 let z = self.add_node(NodeDef::Z(0.0));
                 self.add_wire(z, id).ok();
@@ -2646,7 +2654,8 @@ impl Diagram {
                             .then_some(id2)
                     })
                     .collect();
-                if self.arity(id).unwrap() - hstates.len() == 1 {
+                let n = hstates.len();
+                if n > 1 && self.arity(id).unwrap() - n == 1 {
                     return Some(HStateMul(hstates, id));
                 }
             }
