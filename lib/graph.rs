@@ -643,7 +643,7 @@ struct ColorFlip(NodeId);
 /// oppositely colored spider of arity 2 with phase π on a single wire.
 #[derive(Clone, Debug)]
 struct PiCommute(NodeId, NodeId, NodeId);
-//     PiCommute(z/x spider1, x/z spider, z/x spider2)
+//     PiCommute(z/x-spider1, x/z-spider, z/x-spider2)
 
 /// A spider of arbitrary arity and phase surrounded by a number of oppositely
 /// colored spiders if arity 2 and phase π.
@@ -651,12 +651,11 @@ struct PiCommute(NodeId, NodeId, NodeId);
 struct PhaseNeg(NodeId);
 //     PhaseNeg(spider)
 
-/// `n` phaseless Z-spiders with all-to-all connectivity to `m` phaseless
-/// X-spiders, where each Z-spider has arity `m + 1` and each X-spider has arity
-/// `n + 1`.
-#[derive(Clone, Debug)]
-struct BiAlgebra(Vec<NodeId>, Vec<NodeId>);
-//     BiAlgebra(z spiders,   x spiders)
+/// Two Z-spiders and two X-spiders of arbitrary phase and arity in a
+/// checkerboard square.
+#[derive(Copy, Clone, Debug)]
+struct BiAlgebra(NodeId, NodeId, NodeId, NodeId);
+//     BiAlgebra(z-spider1, z-spider2, x-spider1, x-spider2)
 
 /// Four spiders in a checkerboard square, each with arity 3, such that the
 /// phases of the spiders of each color all have idential phases that are an
@@ -718,11 +717,11 @@ struct HMultiState(NodeId);
 struct HHopf(NodeId, NodeId);
 //     HHopf(z-spider, hbox)
 
-/// `n` phaseless Z-spiders with all-to-all connectivity to `m` default-argument
-/// H-boxes, where each Z-spider has arity `m + 1` and each H-box has arity `n +
-/// 1`.
-#[derive(Clone, Debug)]
-struct HBiAlgebra(Vec<NodeId>, Vec<NodeId>);
+/// Two Z-spiders and two H-boxes of arbitrary argument and arity in a
+/// checkerboard square.
+#[derive(Copy, Clone, Debug)]
+struct HBiAlgebra(NodeId, NodeId, NodeId, NodeId);
+//     HBiAlgebra(z-spider1, z-spider2, h-box1, h-box2)
 
 /// An X-spider of arity 2 and phase π connected to a phaseless Z-spider of
 /// arity 3 over two wires, each with an H-box of arbitrary argument.
@@ -1584,8 +1583,9 @@ impl Diagram {
         fn n1(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_h() && n.has_defarg() && dg.arity(id).unwrap() == 2
         }
-        fn n2(_: &Diagram, p: &NodePath, _: &NodeId, n: &Node) -> bool {
+        fn n2(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_same_color(&p[0].1)
+                && dg.mutual_arity(p[0].0, id).unwrap() == 0
         }
         fn n3(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_h() && n.has_defarg() && dg.arity(id).unwrap() == 2
@@ -1736,13 +1736,11 @@ impl Diagram {
         fn n0(_: &Diagram, _: &NodePath, _: &NodeId, n: &Node) -> bool {
             n.is_z() || n.is_x()
         }
-        fn n1(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
-            n.is_h() && n.has_defarg()
-                && dg.mutual_arity(id, p[0].0).unwrap() == 1
+        fn n1(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
+            n.is_h() && n.has_defarg() && dg.arity(id).unwrap() == 2
         }
-        fn n2(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
-            ((p[0].1.is_z() && n.is_x()) || (p[0].1.is_x() && n.is_z()))
-                && dg.mutual_arity(id, p[1].0).unwrap() == 1
+        fn n2(_: &Diagram, p: &NodePath, _: &NodeId, n: &Node) -> bool {
+            (p[0].1.is_z() && n.is_x()) || (p[0].1.is_x() && n.is_z())
         }
         self.find_path(self.nodes_inner(), &[n0, n1, n2], Vec::new())
             .map(|path| HMove(path[0].0, path[1].0, path[2].0))
@@ -1947,12 +1945,11 @@ impl Diagram {
         }
         fn n1(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             p[0].1.is_diff_color_and(n, |_, ph| phase_eq(ph, PI))
-                && dg.mutual_arity(id, p[0].0).unwrap() == 1
+                && dg.arity(id).unwrap() == 2
         }
-        fn n2(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
+        fn n2(_: &Diagram, p: &NodePath, _: &NodeId, n: &Node) -> bool {
             p[0].1.is_same_color(n)
-                && dg.mutual_arity(id, p[1].0).unwrap() == 1
-                && dg.mutual_arity(id, p[0].0).unwrap() == 0
+                // && dg.mutual_arity(id, p[0].0).unwrap() == 0
         }
         self.find_path(self.nodes_inner(), &[n0, n1, n2], Vec::new())
             .map(|path| PiCommute(path[0].0, path[1].0, path[2].0))
@@ -2164,45 +2161,70 @@ impl Diagram {
     }
 
     fn find_bialgebra(&self) -> Option<BiAlgebra> {
-        // the problem is to find a maximal biclique in the diagram (comprising
-        // Z- and X-spiders), subject to the constraint that each spider must
-        // also have exactly one wire connecting it to any node outside the
-        // biclique
-        todo!()
+        fn n0(_: &Diagram, _: &NodePath, _: &NodeId, n: &Node) -> bool {
+            n.is_z()
+        }
+        fn n1(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
+            n.is_x() && dg.mutual_arity(p[0].0, id).unwrap() == 1
+        }
+        fn n2(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
+            n.is_z() && dg.mutual_arity(p[1].0, id).unwrap() == 1
+                && dg.mutual_arity(p[0].0, id).unwrap() == 0
+        }
+        fn n3(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
+            n.is_x() && dg.mutual_arity(p[2].0, id).unwrap() == 1
+                && dg.mutual_arity(p[0].0, id).unwrap() == 1
+                && dg.mutual_arity(p[1].0, id).unwrap() == 0
+        }
+        self.find_path(self.nodes_inner(), &[n0, n1, n2, n3], Vec::new())
+            .map(|p| BiAlgebra(p[0].0, p[2].0, p[1].0, p[3].0))
     }
 
     /// Simplify by applying the bialgebra rule.
-    #[allow(unused_variables)]
     pub fn simplify_bialgebra(&mut self) -> bool {
-        if let Some(bialgebra) = self.find_bialgebra() {
-            todo!()
+        if let Some(BiAlgebra(z1, z2, x1, x2)) = self.find_bialgebra() {
+            let mut wids: Vec<WireId>;
+            wids = self.wires_between_inner(z1, x1).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+            wids = self.wires_between_inner(z1, x2).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+            wids = self.wires_between_inner(z2, x1).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+            wids = self.wires_between_inner(z2, x2).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+            let new_x = self.add_node(NodeDef::X(0.0));
+            let new_z = self.add_node(NodeDef::Z(0.0));
+            self.add_wire(z1, new_x).ok();
+            self.add_wire(z2, new_x).ok();
+            self.add_wire(x1, new_z).ok();
+            self.add_wire(x2, new_z).ok();
+            self.add_wire(new_x, new_z).ok();
+            true
         } else {
             false
         }
     }
 
     fn find_bit_bialgebra(&self) -> Option<BitBiAlgebra> {
-        fn n0(dg: &Diagram, _: &NodePath, id: &NodeId, n: &Node) -> bool {
+        fn n0(_: &Diagram, _: &NodePath, _: &NodeId, n: &Node) -> bool {
             n.is_z_and(|ph| ph.rem_euclid(PI) < EPSILON)
-                && dg.arity(id).unwrap() == 3
         }
         fn n1(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_x_and(|ph| ph.rem_euclid(PI) < EPSILON)
-                && dg.arity(id).unwrap() == 3
                 && dg.mutual_arity(p[0].0, id).unwrap() == 1
         }
         fn n2(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_z_and(|ph| ph.rem_euclid(PI) < EPSILON)
-                && dg.arity(id).unwrap() == 3
                 && dg.mutual_arity(p[1].0, id).unwrap() == 1
                 && n.is_same_color_and(&p[0].1, phase_eq)
+                && dg.mutual_arity(p[0].0, id).unwrap() == 0
         }
         fn n3(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
             n.is_x_and(|ph| ph.rem_euclid(PI) < EPSILON)
-                && dg.arity(id).unwrap() == 3
                 && dg.mutual_arity(p[2].0, id).unwrap() == 1
                 && dg.mutual_arity(p[0].0, id).unwrap() == 1
                 && n.is_same_color_and(&p[1].1, phase_eq)
+                && dg.mutual_arity(p[1].0, id).unwrap() == 0
         }
         self.find_path(self.nodes_inner(), &[n0, n1, n2, n3], Vec::new())
             .map(|p| BitBiAlgebra(p[0].0, p[2].0, p[1].0, p[3].0))
@@ -2212,33 +2234,31 @@ impl Diagram {
     /// the spiders have phases equal to integer multiples of π.
     pub fn simplify_bit_bialgebra(&mut self) -> bool {
         if let Some(BitBiAlgebra(z1, z2, x1, x2)) = self.find_bit_bialgebra() {
-            let z_neighbors: (NodeId, NodeId)
-                = (
-                    self.neighbors_of(z1).unwrap()
-                        .find(|(id, _)| *id != x1 && *id != x2).unwrap().0,
-                    self.neighbors_of(z2).unwrap()
-                        .find(|(id, _)| *id != x1 && *id != x2).unwrap().0,
-                );
-            let x_neighbors: (NodeId, NodeId)
-                = (
-                    self.neighbors_of(x1).unwrap()
-                        .find(|(id, _)| *id != z1 && *id != z2).unwrap().0,
-                    self.neighbors_of(x2).unwrap()
-                        .find(|(id, _)| *id != z1 && *id != z2).unwrap().0,
-                );
-            let Some(Node::Z(z_ph))
-                = self.remove_node(z1) else { unreachable!() };
-            self.remove_node(z2);
-            let Some(Node::X(x_ph))
-                = self.remove_node(x1) else { unreachable!() };
-            self.remove_node(x2);
-            let z = self.add_node(NodeDef::Z(z_ph));
-            self.add_wire(z, x_neighbors.0).ok();
-            self.add_wire(z, x_neighbors.1).ok();
-            let x = self.add_node(NodeDef::X(x_ph));
-            self.add_wire(x, z_neighbors.0).ok();
-            self.add_wire(x, z_neighbors.1).ok();
-            self.add_wire(z, x).ok();
+            let mut wids: Vec<WireId>;
+            wids = self.wires_between_inner(z1, x1).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+            wids = self.wires_between_inner(z1, x2).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+            wids = self.wires_between_inner(z2, x1).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+            wids = self.wires_between_inner(z2, x2).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+
+            let z_phase = self.nodes[&z1].phase().unwrap();
+            let x_phase = self.nodes[&x1].phase().unwrap();
+
+            if let Some(n) = self.nodes.get_mut(&z1) { *n = Node::Z(0.0); }
+            if let Some(n) = self.nodes.get_mut(&z2) { *n = Node::Z(0.0); }
+            if let Some(n) = self.nodes.get_mut(&x1) { *n = Node::X(0.0); }
+            if let Some(n) = self.nodes.get_mut(&x2) { *n = Node::X(0.0); }
+
+            let new_x = self.add_node(NodeDef::X(x_phase));
+            let new_z = self.add_node(NodeDef::Z(z_phase));
+            self.add_wire(z1, new_x).ok();
+            self.add_wire(z2, new_x).ok();
+            self.add_wire(x1, new_z).ok();
+            self.add_wire(x2, new_z).ok();
+            self.add_wire(new_x, new_z).ok();
             true
         } else {
             false
@@ -2575,14 +2595,45 @@ impl Diagram {
     }
 
     fn find_hbialgebra(&self) -> Option<HBiAlgebra> {
-        todo!()
+        fn n0(_: &Diagram, _: &NodePath, _: &NodeId, n: &Node) -> bool {
+            n.is_z()
+        }
+        fn n1(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
+            n.is_h() && dg.mutual_arity(p[0].0, id).unwrap() == 1
+        }
+        fn n2(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
+            n.is_z() && dg.mutual_arity(p[1].0, id).unwrap() == 1
+        }
+        fn n3(dg: &Diagram, p: &NodePath, id: &NodeId, n: &Node) -> bool {
+            n.is_h() && dg.mutual_arity(p[2].0, id).unwrap() == 1
+                && dg.mutual_arity(p[0].0, id).unwrap() == 1
+        }
+        self.find_path(self.nodes_inner(), &[n0, n1, n2, n3], Vec::new())
+            .map(|p| HBiAlgebra(p[0].0, p[2].0, p[1].0, p[3].0))
     }
 
     /// Simplify by applying the H-box version of the bialgebra rule.
-    #[allow(unused_variables)]
     pub fn simplify_hbialgebra(&mut self) -> bool {
-        if let Some(hbialgebra) = self.find_hbialgebra() {
-            todo!()
+        if let Some(HBiAlgebra(z1, z2, h1, h2)) = self.find_hbialgebra() {
+            let mut wids: Vec<WireId>;
+            wids = self.wires_between_inner(z1, h1).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+            wids = self.wires_between_inner(z1, h2).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+            wids = self.wires_between_inner(z2, h1).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+            wids = self.wires_between_inner(z2, h2).unwrap().collect();
+            wids.into_iter().for_each(|id| { self.remove_wire(id); });
+            let new_h1 = self.add_node(NodeDef::H((-1.0).into()));
+            let new_h2 = self.add_node(NodeDef::H((-1.0).into()));
+            let new_z = self.add_node(NodeDef::Z(0.0));
+            self.add_wire(z1, new_h1).ok();
+            self.add_wire(z2, new_h1).ok();
+            self.add_wire(h1, new_z).ok();
+            self.add_wire(h2, new_z).ok();
+            self.add_wire(new_h1, new_h2).ok();
+            self.add_wire(new_h2, new_z).ok();
+            true
         } else {
             false
         }
@@ -2634,7 +2685,7 @@ impl Diagram {
         todo!()
     }
 
-    /// Simplify by applying the generalized multiplying rule.
+    /// Simplify by applying the generalized multiplication rule.
     #[allow(unused_variables)]
     pub fn simplify_hmul(&mut self) -> bool {
         if let Some(hmul) = self.find_hmul() {
@@ -2768,9 +2819,9 @@ impl Diagram {
             { continue; }
 
             if [
-                // self.simplify_bialgebra(),
-                // self.simplify_hbialgebra(),
                 self.simplify_bit_bialgebra(),
+                self.simplify_bialgebra(),
+                self.simplify_hbialgebra(),
             ].into_iter().any(identity)
             { continue; }
 
@@ -2792,6 +2843,91 @@ impl Diagram {
                 self.simplify_pi_commute(),
             ].into_iter().any(identity)
             { continue; }
+
+            break;
+        }
+    }
+
+    /// Simplify a diagram by applying all simplification rules until no further
+    /// simplifications can be made, with basic debug output.
+    pub fn simplify_debug(&mut self) {
+        loop {
+            if let Some((rule, _))
+                = [
+                    ("istate",          self.simplify_istate()),
+                    ("hstate",          self.simplify_hstate()),
+                    ("hmultistate",     self.simplify_hmultistate()),
+                    ("hstate_copy",     self.simplify_hstate_copy()),
+                    ("state_copy",      self.simplify_state_copy()),
+                    ("color_flip",      self.simplify_color_flip()),
+                    ("fuse",            self.simplify_fuse()),
+                    ("hfuse",           self.simplify_hfuse()),
+                    ("identity",        self.simplify_identity()),
+                    ("hloop",           self.simplify_hloop()),
+                    ("hstate_mul",      self.simplify_hstate_mul()),
+                    ("habsorb",         self.simplify_habsorb()),
+                    ("hexplode",        self.simplify_hexplode()),
+                ]
+                .into_iter()
+                .find(|(_, b)| *b)
+            { println!("{rule}"); continue; }
+
+            if let Some((rule, _))
+                = [
+                    ("hopf",            self.simplify_hopf()),
+                    ("h2hopf",          self.simplify_h2hopf()),
+                    ("hhopf",           self.simplify_hhopf()),
+                ]
+                .into_iter()
+                .find(|(_, b)| *b)
+            { println!("{rule}"); continue; }
+
+            if let Some((rule, _))
+                = [
+                    ("h_euler",         self.simplify_h_euler()),
+                    ("phase_neg",       self.simplify_phase_neg()),
+                ]
+            .into_iter()
+            .find(|(_, b)| *b)
+            { println!("{rule}"); continue; }
+
+            if let Some((rule, _))
+                = [
+                    ("bit_bialgebra",   self.simplify_bit_bialgebra()),
+                    ("bialgebra",       self.simplify_bialgebra()),
+                    ("hbialgebra",      self.simplify_hbialgebra()),
+                ]
+                .into_iter()
+                .find(|(_, b)| *b)
+            { println!("{rule}"); continue; }
+
+            if let Some((rule, _))
+                = [
+                    // ("hmul", self.simplify_hmul()),
+                    ("havg",            self.simplify_havg()),
+                    ("hintro",          self.simplify_hintro()),
+                ]
+                .into_iter()
+                .find(|(_, b)| *b)
+            { println!("{rule}"); continue; }
+
+            if let Some((rule, _))
+                = [
+                    ("reduce_h",        self.reduce_h()),
+                    ("reduce_pi",       self.reduce_pi()),
+                ]
+                .into_iter()
+                .find(|(_, b)| *b)
+            { println!("{rule}"); continue; }
+
+            if let Some((rule, _))
+                = [
+                    ("hmove",           self.simplify_hmove()),
+                    ("pi_commute",      self.simplify_pi_commute()),
+                ]
+                .into_iter()
+                .find(|(_, b)| *b)
+            { println!("{rule}"); continue; }
 
             break;
         }
