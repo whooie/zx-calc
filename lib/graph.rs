@@ -729,12 +729,6 @@ struct HBiAlgebra(NodeId, NodeId, NodeId, NodeId);
 struct HAvg(NodeId, NodeId, NodeId, NodeId);
 //     HAvg(pi x-spider, hbox1, hbox2, z-spider)
 
-/// Two phaseless Z-spiders of arbitrary arities connected to each other by an
-/// arbitrary number of wires, each with an H-box of arbitrary argument.
-#[derive(Clone, Debug)]
-struct HMul(NodeId, Vec<NodeId>, NodeId);
-//     HMul(spider1, hboxes, spider2)
-
 /// An arbitrary number `n` of H-boxes, each with arity 1, connected to a
 /// phaseless Z-spider of arity `n + 1`.
 #[derive(Clone, Debug)]
@@ -2681,20 +2675,6 @@ impl Diagram {
         }
     }
 
-    fn find_hmul(&self) -> Option<HMul> {
-        todo!()
-    }
-
-    /// Simplify by applying the generalized multiplication rule.
-    #[allow(unused_variables)]
-    pub fn simplify_hmul(&mut self) -> bool {
-        if let Some(hmul) = self.find_hmul() {
-            todo!()
-        } else {
-            false
-        }
-    }
-
     fn find_hstate_mul(&self) -> Option<HStateMul> {
         for (id, node) in self.nodes_inner() {
             if node.is_z_and(|ph| phase_eq(ph, 0.0)) {
@@ -2705,8 +2685,7 @@ impl Diagram {
                             .then_some(id2)
                     })
                     .collect();
-                let n = hstates.len();
-                if n > 1 && self.arity(id).unwrap() - n == 1 {
+                if hstates.len() >= 2 {
                     return Some(HStateMul(hstates, id));
                 }
             }
@@ -2717,10 +2696,6 @@ impl Diagram {
     /// Simplify by applying the multiplying rule for H-box states.
     pub fn simplify_hstate_mul(&mut self) -> bool {
         if let Some(HStateMul(hstates, spider)) = self.find_hstate_mul() {
-            let neighbor: NodeId
-                = self.neighbors_of(spider).unwrap()
-                .filter_map(|(id, _)| (!hstates.contains(&id)).then_some(id))
-                .next().unwrap();
             let a: C64
                 = hstates.into_iter()
                 .map(|id| {
@@ -2729,9 +2704,9 @@ impl Diagram {
                     a
                 })
                 .product();
-            self.remove_node(spider);
+            self.remove_io_gen(spider);
             let new = self.add_node(NodeDef::H(a));
-            self.add_wire(new, neighbor).ok();
+            self.add_wire(new, spider).ok();
             true
         } else {
             false
@@ -2786,62 +2761,60 @@ impl Diagram {
     /// Simplify a diagram by applying all simplification rules until no further
     /// simplifications can be made.
     pub fn simplify(&mut self) {
-        use std::convert::identity;
         loop {
             if [
-                self.simplify_istate(),
-                self.simplify_hstate(),
-                self.simplify_hmultistate(),
-                self.simplify_hstate_copy(),
-                self.simplify_state_copy(),
-                self.simplify_color_flip(),
-                self.simplify_fuse(),
-                self.simplify_hfuse(),
-                self.simplify_identity(),
-                self.simplify_hloop(),
-                self.simplify_hstate_mul(),
-                self.simplify_habsorb(),
-                self.simplify_hexplode(),
-            ].into_iter().any(identity)
+                |dg: &mut Self| dg.simplify_istate(),
+                |dg: &mut Self| dg.simplify_hstate_mul(),
+                |dg: &mut Self| dg.simplify_habsorb(),
+                |dg: &mut Self| dg.simplify_hexplode(),
+                |dg: &mut Self| dg.simplify_hmultistate(),
+                |dg: &mut Self| dg.simplify_hstate(),
+                |dg: &mut Self| dg.simplify_hstate_copy(),
+                |dg: &mut Self| dg.simplify_state_copy(),
+                |dg: &mut Self| dg.simplify_color_flip(),
+                |dg: &mut Self| dg.simplify_fuse(),
+                |dg: &mut Self| dg.simplify_hfuse(),
+                |dg: &mut Self| dg.simplify_identity(),
+                |dg: &mut Self| dg.simplify_hloop(),
+            ].into_iter().any(|f| f(self))
             { continue; }
 
             if [
-                self.simplify_hopf(),
-                self.simplify_h2hopf(),
-                self.simplify_hhopf(),
-            ].into_iter().any(identity)
+                |dg: &mut Self| dg.simplify_hopf(),
+                |dg: &mut Self| dg.simplify_h2hopf(),
+                |dg: &mut Self| dg.simplify_hhopf(),
+            ].into_iter().any(|f| f(self))
             { continue; }
 
             if [
-                self.simplify_h_euler(),
-                self.simplify_phase_neg(),
-            ].into_iter().any(identity)
+                |dg: &mut Self| dg.simplify_h_euler(),
+                |dg: &mut Self| dg.simplify_phase_neg(),
+            ].into_iter().any(|f| f(self))
             { continue; }
 
             if [
-                self.simplify_bit_bialgebra(),
-                self.simplify_bialgebra(),
-                self.simplify_hbialgebra(),
-            ].into_iter().any(identity)
+                |dg: &mut Self| dg.simplify_havg(),
+                |dg: &mut Self| dg.simplify_hintro(),
+            ].into_iter().any(|f| f(self))
             { continue; }
 
             if [
-                // self.simplify_hmul(),
-                self.simplify_havg(),
-                self.simplify_hintro(),
-            ].into_iter().any(identity)
+                |dg: &mut Self| dg.simplify_bit_bialgebra(),
+                |dg: &mut Self| dg.simplify_bialgebra(),
+                |dg: &mut Self| dg.simplify_hbialgebra(),
+            ].into_iter().any(|f| f(self))
             { continue; }
 
             if [
-                self.reduce_h(),
-                self.reduce_pi(),
-            ].into_iter().any(identity)
+                |dg: &mut Self| dg.reduce_h(),
+                |dg: &mut Self| dg.reduce_pi(),
+            ].into_iter().any(|f| f(self))
             { continue; }
 
             if [
-                self.simplify_hmove(),
-                self.simplify_pi_commute(),
-            ].into_iter().any(identity)
+                |dg: &mut Self| dg.simplify_hmove(),
+                |dg: &mut Self| dg.simplify_pi_commute(),
+            ].into_iter().any(|f| f(self))
             { continue; }
 
             break;
@@ -2851,82 +2824,82 @@ impl Diagram {
     /// Simplify a diagram by applying all simplification rules until no further
     /// simplifications can be made, with basic debug output.
     pub fn simplify_debug(&mut self) {
+        struct F(&'static str, fn(&mut Diagram) -> bool);
         loop {
-            if let Some((rule, _))
+            if let Some(F(rule, _))
                 = [
-                    ("istate",          self.simplify_istate()),
-                    ("hstate",          self.simplify_hstate()),
-                    ("hmultistate",     self.simplify_hmultistate()),
-                    ("hstate_copy",     self.simplify_hstate_copy()),
-                    ("state_copy",      self.simplify_state_copy()),
-                    ("color_flip",      self.simplify_color_flip()),
-                    ("fuse",            self.simplify_fuse()),
-                    ("hfuse",           self.simplify_hfuse()),
-                    ("identity",        self.simplify_identity()),
-                    ("hloop",           self.simplify_hloop()),
-                    ("hstate_mul",      self.simplify_hstate_mul()),
-                    ("habsorb",         self.simplify_habsorb()),
-                    ("hexplode",        self.simplify_hexplode()),
+                    F("istate",        |dg| dg.simplify_istate()),
+                    F("hstate_mul",    |dg| dg.simplify_hstate_mul()),
+                    F("habsorb",       |dg| dg.simplify_habsorb()),
+                    F("hexplode",      |dg| dg.simplify_hexplode()),
+                    F("hmultistate",   |dg| dg.simplify_hmultistate()),
+                    F("hstate",        |dg| dg.simplify_hstate()),
+                    F("hstate_copy",   |dg| dg.simplify_hstate_copy()),
+                    F("state_copy",    |dg| dg.simplify_state_copy()),
+                    F("color_flip",    |dg| dg.simplify_color_flip()),
+                    F("fuse",          |dg| dg.simplify_fuse()),
+                    F("hfuse",         |dg| dg.simplify_hfuse()),
+                    F("identity",      |dg| dg.simplify_identity()),
+                    F("hloop",         |dg| dg.simplify_hloop()),
                 ]
                 .into_iter()
-                .find(|(_, b)| *b)
+                .find(|F(_, f)| f(self))
             { println!("{rule}"); continue; }
 
-            if let Some((rule, _))
+            if let Some(F(rule, _))
                 = [
-                    ("hopf",            self.simplify_hopf()),
-                    ("h2hopf",          self.simplify_h2hopf()),
-                    ("hhopf",           self.simplify_hhopf()),
+                    F("hopf",          |dg| dg.simplify_hopf()),
+                    F("h2hopf",        |dg| dg.simplify_h2hopf()),
+                    F("hhopf",         |dg| dg.simplify_hhopf()),
                 ]
                 .into_iter()
-                .find(|(_, b)| *b)
+                .find(|F(_, f)| f(self))
             { println!("{rule}"); continue; }
 
-            if let Some((rule, _))
+            if let Some(F(rule, _))
                 = [
-                    ("h_euler",         self.simplify_h_euler()),
-                    ("phase_neg",       self.simplify_phase_neg()),
-                ]
-            .into_iter()
-            .find(|(_, b)| *b)
-            { println!("{rule}"); continue; }
-
-            if let Some((rule, _))
-                = [
-                    ("bit_bialgebra",   self.simplify_bit_bialgebra()),
-                    ("bialgebra",       self.simplify_bialgebra()),
-                    ("hbialgebra",      self.simplify_hbialgebra()),
+                    F("h_euler",       |dg| dg.simplify_h_euler()),
+                    F("phase_neg",     |dg| dg.simplify_phase_neg()),
                 ]
                 .into_iter()
-                .find(|(_, b)| *b)
+                .find(|F(_, f)| f(self))
             { println!("{rule}"); continue; }
 
-            if let Some((rule, _))
+            if let Some(F(rule, _))
                 = [
-                    // ("hmul", self.simplify_hmul()),
-                    ("havg",            self.simplify_havg()),
-                    ("hintro",          self.simplify_hintro()),
+                    F("havg",          |dg| dg.simplify_havg()),
+                    F("hintro",        |dg| dg.simplify_hintro()),
                 ]
                 .into_iter()
-                .find(|(_, b)| *b)
+                .find(|F(_, f)| f(self))
             { println!("{rule}"); continue; }
 
-            if let Some((rule, _))
+            if let Some(F(rule, _))
                 = [
-                    ("reduce_h",        self.reduce_h()),
-                    ("reduce_pi",       self.reduce_pi()),
+                    F("bit_bialgebra", |dg| dg.simplify_bit_bialgebra()),
+                    F("bialgebra",     |dg| dg.simplify_bialgebra()),
+                    F("hbialgebra",    |dg| dg.simplify_hbialgebra()),
                 ]
                 .into_iter()
-                .find(|(_, b)| *b)
+                .find(|F(_, f)| f(self))
             { println!("{rule}"); continue; }
 
-            if let Some((rule, _))
+            if let Some(F(rule, _))
                 = [
-                    ("hmove",           self.simplify_hmove()),
-                    ("pi_commute",      self.simplify_pi_commute()),
+                    F("reduce_h",      |dg| dg.reduce_h()),
+                    F("reduce_pi",     |dg| dg.reduce_pi()),
                 ]
                 .into_iter()
-                .find(|(_, b)| *b)
+                .find(|F(_, f)| f(self))
+            { println!("{rule}"); continue; }
+
+            if let Some(F(rule, _))
+                = [
+                    F("hmove",         |dg| dg.simplify_hmove()),
+                    F("pi_commute",    |dg| dg.simplify_pi_commute()),
+                ]
+                .into_iter()
+                .find(|F(_, f)| f(self))
             { println!("{rule}"); continue; }
 
             break;

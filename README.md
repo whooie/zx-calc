@@ -15,9 +15,9 @@ reasoning about linear maps between two-level quantum states.
 - Diagram tools
     - [x] Scalar computation
     - [x] Evaluation (based on conversion to ketbra form)
-    - [ ] Diagram composition/tensoring
+    - [ ] Diagram composition/tensoring (partial: untested)
 - Diagram simplification (graph-based only)
-    - [ ] ZX rewrite rules
+    - [x] ZX rewrite rules
         - [x] Z/X/HH identity removal
         - [x] Spider fusion
         - [x] Hopf rule
@@ -30,10 +30,10 @@ reasoning about linear maps between two-level quantum states.
         - [x] π-commute and fuse for Z-X-Z/X-Z-X sandwiches
         - [x] Heuristic-based general reduction of H-boxes via color change
         - [x] Heuristic-based general reduction of π-spiders via π-commute
-        - [ ] Bialgebra rule (partial: 2x2 case with nπ phases)
+        - [x] Bialgebra rule
         - [x] State/effect copying
         - [x] Equivalence of spider-states with ±π/2 phases
-    - [ ] ZH rewrite rules
+    - [x] ZH rewrite rules
         - [x] H-box fusion
         - [x] π-state/effect absorption
         - [x] State/effect explosion through an H-box
@@ -41,13 +41,12 @@ reasoning about linear maps between two-level quantum states.
         - [x] π Z-state/effect copying through H-boxes
         - [x] State/effect expansion of H-boxes with label 1
         - [x] H-box version of the Hopf rule
-        - [ ] H-box version of the bialgebra rule
+        - [x] H-box version of the bialgebra rule
         - [x] H-box averaging rule
-        - [x] H-state multiplication rule
-        - [ ] Generalized H-box multiplication rule
+        - [x] Multiplication rule
         - [x] H-box wire introduction rule (reversed)
-    - [ ] Single, exhaustive "simplify" (partial: waiting on final rewrite rules
-      and testing with different strategies)
+    - [ ] Single, exhaustive "simplify" (partial: waiting on testing with
+      different strategies)
     - [x] Scalar computation and removal
     - [ ] Equality testing via simplification
 - Circuits
