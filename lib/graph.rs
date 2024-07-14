@@ -9,7 +9,6 @@ use std::{
     f64::consts::{ PI, FRAC_PI_2 as PI2, TAU },
     fs,
     io::Write,
-    ops::{ Deref, DerefMut },
     path::Path,
 };
 use num_complex::Complex64 as C64;
@@ -32,6 +31,9 @@ pub enum GraphError {
     #[error("error applying bell state/effect: nodes {0}, {1} are not both inputs/outputs")]
     ApplyBellStateNotInputOutput(usize, usize),
 
+    #[error("error applying bell state/effect: cannot apply to a single qubit")]
+    ApplyBellStateSameQubit,
+
     #[error("error applying bell state/effect: input/output node {0} is disconnected")]
     ApplyBellStateDisconnected(usize),
 
@@ -44,6 +46,7 @@ pub enum GraphError {
     #[error("I/O error: {0}")]
     IOError(#[from] std::io::Error),
 }
+use GraphError::*;
 pub type GraphResult<T> = Result<T, GraphError>;
 
 fn fst<T, U>(pair: (T, U)) -> T { pair.0 }
@@ -456,16 +459,6 @@ macro_rules! isomorphism {
             fn as_mut(&mut self) -> &mut $iso_to { &mut self.0 }
         }
 
-        impl Deref for $name {
-            type Target = $iso_to;
-
-            fn deref(&self) -> &Self::Target { &self.0 }
-        }
-
-        impl DerefMut for $name {
-            fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
-        }
-
         $(
             impl From<$from> for $name {
                 fn from(x: $from) -> Self { Self(x.into()) }
@@ -603,6 +596,11 @@ enum Identity {
 struct Fuse(NodeId, NodeId);
 //     Fuse(spider1, spider2)
 
+/// Any spider of either color with one or more self-loops.
+#[derive(Copy, Clone, Debug)]
+struct SpiderSelfLoop(NodeId);
+//     SpiderSelfLoop(spider)
+
 /// Two spiders of opposite color and arbitrary arity and phase with exactly two
 /// adjoining wires.
 #[derive(Copy, Clone, Debug)]
@@ -683,6 +681,11 @@ struct StateCopy(NodeId, NodeId);
 struct HFuse(NodeId, NodeId, NodeId);
 //     HFuse(arg hbox, mid hbox, hbox)
 
+/// Any H-box with one or more self-loops.
+#[derive(Copy, Clone, Debug)]
+struct HSelfLoop(NodeId);
+//     HSelfLoop(h-box)
+
 /// An H-box of arbitrary arity connected to any number of X-states/effects,
 /// each with phase π.
 #[derive(Clone, Debug)]
@@ -754,16 +757,16 @@ type PathNodeSpec = fn(&Diagram, &NodePath, &NodeId, &Node) -> bool;
 /// All accessors are O(1).
 #[derive(Clone, Debug)]
 pub struct Diagram {
-    nodes: HashMap<NodeId, Node>,
-    wires: HashMap<WireId, Wire>,
-    wires_from: HashMap<NodeId, HashSet<WireId>>,
-    wires_between: HashMap<Wire, HashSet<WireId>>,
-    node_id: usize,
-    input_counter: usize,
-    input_gens: HashMap<NodeId, QubitId>,
-    output_counter: usize,
-    output_gens: HashMap<NodeId, QubitId>,
-    edge_id: usize,
+    pub(crate) nodes: HashMap<NodeId, Node>,
+    pub(crate) wires: HashMap<WireId, Wire>,
+    pub(crate) wires_from: HashMap<NodeId, HashSet<WireId>>,
+    pub(crate) wires_between: HashMap<Wire, HashSet<WireId>>,
+    pub(crate) node_id: usize,
+    pub(crate) input_counter: usize,
+    pub(crate) input_gens: HashMap<NodeId, QubitId>,
+    pub(crate) output_counter: usize,
+    pub(crate) output_gens: HashMap<NodeId, QubitId>,
+    pub(crate) edge_id: usize,
 }
 
 impl Default for Diagram {
@@ -968,18 +971,18 @@ impl Diagram {
         let a = a.into();
         let b = b.into();
         self.nodes.get(&a)
-            .ok_or(GraphError::AddWireMissingNode(a.0))
+            .ok_or(AddWireMissingNode(a.0))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(a).unwrap())
                     .then_some(())
-                    .ok_or(GraphError::AddWireConnectedInputOutput(a.0))
+                    .ok_or(AddWireConnectedInputOutput(a.0))
             })?;
         self.nodes.get(&b)
-            .ok_or(GraphError::AddWireMissingNode(b.0))
+            .ok_or(AddWireMissingNode(b.0))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(b).unwrap())
                     .then_some(())
-                    .ok_or(GraphError::AddWireConnectedInputOutput(b.0))
+                    .ok_or(AddWireConnectedInputOutput(b.0))
             })?;
         let id = self.edge_id;
         self.wires.insert(id.into(), Wire(a, b));
@@ -1022,11 +1025,11 @@ impl Diagram {
     {
         let id = node_id.into();
         self.nodes.get(&id)
-            .ok_or(GraphError::AddWireMissingNode(id.0))
+            .ok_or(AddWireMissingNode(id.0))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(id).unwrap())
                     .then_some(())
-                    .ok_or(GraphError::AddWireConnectedInputOutput(id.0))
+                    .ok_or(AddWireConnectedInputOutput(id.0))
             })?;
         let input_id = self.add_node(NodeDef::Input);
         let wire_id = self.add_wire(id, input_id)?;
@@ -1045,11 +1048,11 @@ impl Diagram {
     {
         let id = node_id.into();
         self.nodes.get(&id)
-            .ok_or(GraphError::AddWireMissingNode(id.0))
+            .ok_or(AddWireMissingNode(id.0))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(id).unwrap())
                     .then_some(())
-                    .ok_or(GraphError::AddWireConnectedInputOutput(id.0))
+                    .ok_or(AddWireConnectedInputOutput(id.0))
             })?;
         let output_id = self.add_node(NodeDef::Output);
         let wire_id = self.add_wire(id, output_id)?;
@@ -1081,13 +1084,17 @@ impl Diagram {
                     _ => unreachable!(),
                 }
                 Ok(new_id)
+            } else if let Some(node) = self.nodes.get_mut(&id) {
+                *node = spider.into();
+                Ok(id)
             } else {
-                self.remove_node(id);
-                let new_id = self.add_node(spider.into());
-                Ok(new_id)
+                unreachable!()
+                // self.remove_node(id);
+                // let new_id = self.add_node(spider.into());
+                // Ok(new_id)
             }
         } else {
-            Err(GraphError::ApplyStateNotInputOutput(id.0))
+            Err(ApplyStateNotInputOutput(id.0))
         }
     }
 
@@ -1095,10 +1102,8 @@ impl Diagram {
     /// of optional phase. Returns the ID of the new spider node if a phase is
     /// passed.
     ///
-    /// Fails if the given node IDs do not exist, are not input/outputs or have
-    /// arity 0.
-    ///
-    /// *Panics if `a` and `b` are equal.*
+    /// Fails if the given node IDs do not exist, are not input/outputs, have
+    /// arity 0, or refer to the same qubit.
     pub fn apply_bell<A, B>(&mut self, a: A, b: B, phase: Option<Spider>)
         -> GraphResult<Option<NodeId>>
     where
@@ -1107,12 +1112,7 @@ impl Diagram {
     {
         let a = a.into();
         let b = b.into();
-        if a == b {
-            panic!(
-                "Diagram::apply_bell: \
-                cannot apply both connections to the same node"
-            );
-        }
+        if a == b { return Err(ApplyBellStateSameQubit); }
         self.nodes.get(&a)
             .and_then(|na| self.nodes.get(&b).map(|nb| (na, nb)))
             .is_some_and(|(na, nb)| {
@@ -1120,18 +1120,18 @@ impl Diagram {
                     || (na.is_output() && nb.is_output())
             })
             .then_some(())
-            .ok_or(GraphError::ApplyBellStateNotInputOutput(a.0, b.0))?;
+            .ok_or(ApplyBellStateNotInputOutput(a.0, b.0))?;
         let int_a: NodeId
             = self.neighbors_of(a)
             .and_then(|mut neighbors| neighbors.next())
-            .ok_or(GraphError::ApplyBellStateDisconnected(a.0))?
+            .ok_or(ApplyBellStateDisconnected(a.0))?
             .0;
         let id_a: NodeId = self.add_node(NodeDef::Z(0.0));
         self.add_wire(id_a, int_a).ok();
         let int_b: NodeId
             = self.neighbors_of(b)
             .and_then(|mut neighbors| neighbors.next())
-            .ok_or(GraphError::ApplyBellStateDisconnected(b.0))?
+            .ok_or(ApplyBellStateDisconnected(b.0))?
             .0;
         let id_b: NodeId = self.add_node(NodeDef::Z(0.0));
         self.add_wire(id_b, int_b).ok();
@@ -1397,7 +1397,7 @@ impl Diagram {
                         = self.find_path(
                             self.neighbors_of(id).unwrap(),
                             &specs[1..],
-                            new_acc.clone(),
+                            new_acc,
                         );
                     if let Some(path) = rec {
                         return Some(path);
@@ -1521,6 +1521,33 @@ impl Diagram {
                 .for_each(|id| { self.add_wire(s1, id).ok(); });
             (0..self_loops)
                 .for_each(|_| { self.add_wire(s1, s1).ok(); });
+            true
+        } else {
+            false
+        }
+    }
+
+    fn find_spider_self_loop(&self) -> Option<SpiderSelfLoop> {
+        for (id, node) in self.nodes_inner() {
+            if node.is_z() || node.is_x() {
+                if let Some(wires) = self.wires_between(id, id) {
+                    if wires.count() > 0 {
+                        return Some(SpiderSelfLoop(id));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Remove self-loops on spiders.
+    pub fn simplify_spider_self_loop(&mut self) -> bool {
+        if let Some(SpiderSelfLoop(s)) = self.find_spider_self_loop() {
+            let wires: Vec<WireId>
+                = self.wires_between(s, s).unwrap()
+                .collect();
+            wires.into_iter()
+                .for_each(|id| { self.remove_wire(id); });
             true
         } else {
             false
@@ -2386,6 +2413,38 @@ impl Diagram {
         }
     }
 
+    fn find_h_self_loop(&self) -> Option<HSelfLoop> {
+        for (id, node) in self.nodes_inner() {
+            if node.is_h() {
+                if let Some(wires) = self.wires_between(id, id) {
+                    if wires.count() > 0 {
+                        return Some(HSelfLoop(id));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Rewrite an H-box with argument *a* and at least one self-loop as an
+    /// H-box with argument *(1 + a) / 2* and no self-loops.
+    pub fn simplify_h_self_loop(&mut self) -> bool {
+        if let Some(HSelfLoop(h)) = self.find_h_self_loop() {
+            let wires: Vec<WireId>
+                = self.wires_between(h, h).unwrap()
+                .collect();
+            wires.into_iter()
+                .for_each(|id| { self.remove_wire(id); });
+            if let Some(node) = self.nodes.get_mut(&h) {
+                let Node::H(a) = *node else { unreachable!() };
+                *node = Node::H(0.5 + a / 2.0);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
     fn find_habsorb(&self) -> Option<HAbsorb> {
         for (id, node) in self.nodes() {
             if node.is_h() && self.arity(id).unwrap() > 2 {
@@ -2763,6 +2822,8 @@ impl Diagram {
     pub fn simplify(&mut self) {
         loop {
             if [
+                |dg: &mut Self| dg.simplify_spider_self_loop(),
+                |dg: &mut Self| dg.simplify_h_self_loop(),
                 |dg: &mut Self| dg.simplify_istate(),
                 |dg: &mut Self| dg.simplify_hstate_mul(),
                 |dg: &mut Self| dg.simplify_habsorb(),
@@ -3067,6 +3128,8 @@ impl Diagram {
                     Node::Output(qid) => Node::Input(*qid),
                 };
         }
+        std::mem::swap(&mut self.input_counter, &mut self.output_counter);
+        std::mem::swap(&mut self.input_gens, &mut self.output_gens);
         self
     }
 
@@ -3288,23 +3351,33 @@ impl Diagram {
             .collect();
         let other_output_qids: HashSet<&usize> = other_outputs.keys().collect();
         if self_input_qids != other_output_qids {
-            return Err(GraphError::NonMatchingInputsOutputs);
+            return Err(NonMatchingInputsOutputs);
         }
         let join_io: HashSet<(NodeId, NodeId)>
             = self_inputs.into_iter()
             .map(|(qid, in_id)| {
-                (in_id, NodeId(*other_outputs[&qid] + self.node_id))
+                (in_id, NodeId(other_outputs[&qid].0 + self.node_id))
             })
             .collect();
         self.append_shifted(self.node_id, 0, 0, self.edge_id, other);
         for (in_id, out_id) in join_io.into_iter() {
             let in_neighbor
-                = self.neighbors_of(in_id).unwrap().next().unwrap().0;
+                = self.neighbors_of(in_id).unwrap().next().map(fst);
             let out_neighbor
-                = self.neighbors_of(out_id).unwrap().next().unwrap().0;
-            self.remove_node(in_id);
-            self.remove_node(out_id);
-            self.add_wire(in_neighbor, out_neighbor).ok();
+                = self.neighbors_of(out_id).unwrap().next().map(fst);
+            match (in_neighbor, out_neighbor) {
+                (Some(i), Some(o)) => {
+                    self.remove_node(in_id);
+                    self.remove_node(out_id);
+                    self.add_wire(o, i).ok();
+                },
+                (Some(_i), None) => { self.remove_node(out_id); },
+                (None, Some(_o)) => { self.remove_node(in_id); },
+                (None, None) => {
+                    self.remove_node(in_id);
+                    self.remove_node(out_id);
+                },
+            }
         }
         Ok(self)
     }
@@ -3366,12 +3439,12 @@ impl Diagram {
             .collect();
         let other_input_qids: HashSet<&usize> = other_inputs.keys().collect();
         if self_output_qids != other_input_qids {
-            return Err(GraphError::NonMatchingInputsOutputs);
+            return Err(NonMatchingInputsOutputs);
         }
         let join_io: HashSet<(NodeId, NodeId)>
             = other_inputs.into_iter()
             .map(|(qid, in_id)| {
-                (in_id, NodeId(*self_outputs[&qid] + self.node_id))
+                (in_id, NodeId(self_outputs[&qid].0 + self.node_id))
             })
             .collect();
         self.append_shifted(self.node_id, 0, 0, self.edge_id, other);
@@ -3677,7 +3750,7 @@ impl Diagram {
             .id(Identity::quoted(name))
             .stmts(statements)
             .build()
-            .map_err(GraphError::GraphVizError)
+            .map_err(GraphVizError)
     }
 
     /// Like [`to_graphviz`][Self::to_graphviz], but render directly to a string
@@ -4050,6 +4123,739 @@ macro_rules! graph {
                     .collect();
                 (diagram, nodes)
             })
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OutWire {
+    last: NodeId,
+    wire: WireId,
+    out: NodeId,
+}
+
+pub trait GateDiagram {
+    fn sequence(&self) -> Diagram;
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Gate {
+    /// Identity.
+    I,
+    /// Hadamard.
+    H(usize),
+    /// π-rotation about *x*.
+    X(usize),
+    /// Rotation about *x*.
+    XRot(usize, f64),
+    /// π-rotation about *z*.
+    Z(usize),
+    /// Rotation about *z*.
+    ZRot(usize, f64),
+    /// π-rotation about *x* on the second qubit, controlled by the first.
+    CX(usize, usize),
+    /// Rotation about *x* on the second qubit, controlled by the first.
+    CXRot(usize, usize, f64),
+    /// π-rotation about *z* on the second qubit, controlled by the first.
+    CZ(usize, usize),
+    /// Rotation about *z* on the second qubit, controlled by the first.
+    CZRot(usize, usize, f64),
+    /// Mølmer-Sørensen gate. This gate uses the *xx* definition.
+    MolSor(usize, usize),
+    /// Swap gate.
+    Swap(usize, usize),
+    /// Root-swap gate.
+    SqrtSwap(usize, usize),
+    /// Toffoli gate: π-rotation about *x* on the third qubit, controlled by
+    /// the first and second.
+    Toff(usize, usize, usize),
+}
+
+impl Gate {
+    /// Return `true` if `self` is `H`.
+    pub fn is_h(&self) -> bool { matches!(self, Self::H(..)) }
+
+    /// Return `true` if `self` is `X`.
+    pub fn is_x(&self) -> bool { matches!(self, Self::X(..)) }
+
+    /// Return `true` if `self` is `XRot`.
+    pub fn is_xrot(&self) -> bool { matches!(self, Self::XRot(..)) }
+
+    /// Return `true` if `self` is `Z`.
+    pub fn is_z(&self) -> bool { matches!(self, Self::Z(..)) }
+
+    /// Return `true` if `self` is `ZRot`.
+    pub fn is_zrot(&self) -> bool { matches!(self, Self::ZRot(..)) }
+
+    /// Return `true` if `self` is `CX`.
+    pub fn is_cx(&self) -> bool { matches!(self, Self::CX(..)) }
+
+    /// Return `true` if `self` is `CXRot`.
+    pub fn is_cxrot(&self) -> bool { matches!(self, Self::CXRot(..)) }
+
+    /// Return `true` if `self` is `CZ`.
+    pub fn is_cz(&self) -> bool { matches!(self, Self::CZ(..)) }
+
+    /// Return `true` if `self` is `CZRot`.
+    pub fn is_czrot(&self) -> bool { matches!(self, Self::CZRot(..)) }
+
+    /// Return `true` if `self` is `MolSor`.
+    pub fn is_molsor(&self) -> bool { matches!(self, Self::MolSor(..)) }
+
+    /// Return `true` if `self` is `Swap`.
+    pub fn is_swap(&self) -> bool { matches!(self, Self::Swap(..)) }
+
+    /// Return `true` if `self` is `SqrtSwap`.
+    pub fn is_sqrtswap(&self) -> bool { matches!(self, Self::SqrtSwap(..)) }
+
+    /// Return `true` if `self` is `Toff`.
+    pub fn is_toff(&self) -> bool { matches!(self, Self::Toff(..)) }
+
+    /// Return `true` if `other` is the inverse of `self`.
+    pub fn is_inv(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::I, Self::I) => true,
+            (Self::H(a), Self::H(b)) => a == b,
+            (Self::X(a), Self::X(b)) => a == b,
+            (Self::XRot(a, ang_a), Self::XRot(b, ang_b))
+                => a == b && phase_eq(*ang_a, *ang_b),
+            (Self::Z(a), Self::Z(b)) => a == b,
+            (Self::ZRot(a, ang_a), Self::ZRot(b, ang_b))
+                => a == b && phase_eq(*ang_a, *ang_b),
+            (Self::CX(c_a, t_a), Self::CX(c_b, t_b))
+                => c_a == c_b && t_a == t_b,
+            (Self::CXRot(c_a, t_a, ang_a), Self::CXRot(c_b, t_b, ang_b))
+                => c_a == c_b && t_a == t_b && phase_eq(*ang_a, *ang_b),
+            (Self::CZ(a_a, b_a), Self::CZ(a_b, b_b))
+                => (a_a == a_b && b_a == b_b) || (a_a == b_b && a_b == b_a),
+            (Self::CZRot(a_a, b_a, ang_a), Self::CZRot(a_b, b_b, ang_b))
+                => (a_a == a_b && b_a == b_b && phase_eq(*ang_a, *ang_b))
+                || (a_a == b_b && a_b == b_a && phase_eq(*ang_a, *ang_b)),
+            (Self::MolSor(a_a, b_a), Self::MolSor(a_b, b_b))
+                => (a_a == a_b && b_a == b_b) || (a_a == b_b && a_b == b_a),
+            (Self::Swap(a_a, b_a), Self::Swap(a_b, b_b))
+                => (a_a == a_b && b_a == b_b) || (a_a == b_b && a_b == b_a),
+            (Self::SqrtSwap(a_a, b_a), Self::SqrtSwap(a_b, b_b))
+                => (a_a == a_b && b_a == b_b) || (a_a == b_b && a_b == b_a),
+            (Self::Toff(c0_a, c1_a, t_a), Self::Toff(c0_b, c1_b, t_b))
+                => (c0_a == c0_b && c1_a == c1_b && t_a == t_b)
+                || (c0_a == c1_b && c1_a == c0_b && t_a == t_b),
+            _ => false,
+        }
+    }
+
+    /// Return the inverse of `self`.
+    pub fn inv(&self) -> Self {
+        match *self {
+            Self::I => Self::I,
+            Self::H(k) => Self::H(k),
+            Self::X(k) => Self::X(k),
+            Self::XRot(k, ang) => Self::XRot(k, (TAU - ang).rem_euclid(TAU)),
+            Self::Z(k) => Self::Z(k),
+            Self::ZRot(k, ang) => Self::ZRot(k, (TAU - ang).rem_euclid(TAU)),
+            Self::CX(c, t) => Self::CX(c, t),
+            Self::CXRot(c, t, ang)
+                => Self::CXRot(c, t, (TAU - ang).rem_euclid(TAU)),
+            Self::CZ(a, b) => Self::CZ(a, b),
+            Self::CZRot(a, b, ang)
+                => Self::CZRot(a, b, (TAU - ang).rem_euclid(TAU)),
+            Self::MolSor(a, b) => Self::MolSor(a, b),
+            Self::Swap(a, b) => Self::Swap(a, b),
+            Self::SqrtSwap(a, b) => Self::SqrtSwap(a, b),
+            Self::Toff(c0, c1, t) => Self::Toff(c0, c1, t),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum State {
+    /// ∣0⟩ = ∣+⟩ + ∣–⟩
+    Zero,
+    /// ∣1⟩ = ∣+⟩ – ∣–⟩
+    One,
+    /// ∣+⟩ = ∣0⟩ + ∣1⟩
+    Plus,
+    /// ∣–⟩ = ∣0⟩ - ∣1⟩
+    Minus,
+    /// Empty, undefined state.
+    Undef,
+}
+
+/// Circuit-builder interface for a [`Diagram`].
+///
+/// The definitions used for supported [`Gate`]s are all chosen to use only
+/// ZX-calculus primitives, except for [`Toff`][Gate::Toff], which uses a single
+/// trinary H-box.
+#[derive(Clone, Debug)]
+pub struct CircuitDiagram {
+    pub(crate) n: usize,
+    pub(crate) diagram: Diagram,
+    pub(crate) ins: Vec<NodeId>,
+    pub(crate) outs: Vec<OutWire>,
+}
+
+macro_rules! insert_node {
+    ($self:expr, $idx:expr, $nodedef:expr) => {
+        if let Some(OutWire { last, wire, out }) = $self.outs.get_mut($idx) {
+            $self.diagram.remove_wire(*wire).unwrap();
+            let new = $self.diagram.add_node($nodedef);
+            $self.diagram.add_wire(*last, new).unwrap();
+            *wire = $self.diagram.add_wire(new, *out).unwrap();
+            *last = new;
+            new
+        } else {
+            unreachable!()
+        }
+    }
+}
+
+impl AsRef<Diagram> for CircuitDiagram {
+    fn as_ref(&self) -> &Diagram { &self.diagram }
+}
+
+impl CircuitDiagram {
+    /// Create a new `CircuitDiagram` corresponding to the identity on `n`
+    /// qubits.
+    pub fn new(n: usize) -> Self {
+        let mut diagram = Diagram::new();
+        let (ins, outs): (Vec<NodeId>, Vec<OutWire>)
+            = (0..n).map(|_| {
+                let last = diagram.add_node(NodeDef::Input);
+                let out = diagram.add_node(NodeDef::Output);
+                let wire = diagram.add_wire(last, out).unwrap();
+                (last, OutWire { last, wire, out })
+            })
+            .unzip();
+        Self { n, diagram, ins, outs }
+    }
+
+    /// Return the number of qubits.
+    pub fn n(&self) -> usize { self.n }
+
+    /// Return a reference to the underlying [`Diagram`].
+    pub fn as_diagram(&self) -> &Diagram { &self.diagram }
+
+    /// Set the input state for a given qubit.
+    pub fn set_input<S>(&mut self, k: usize, state: S) -> &mut Self
+    where S: Into<State>
+    {
+        if let Some(id) = self.ins.get(k) {
+            if let Some(node) = self.diagram.nodes.get_mut(id) {
+                match state.into() {
+                    State::Zero  => { *node = Node::X(0.0); },
+                    State::One   => { *node = Node::X(PI);  },
+                    State::Plus  => { *node = Node::Z(0.0); },
+                    State::Minus => { *node = Node::Z(PI);  },
+                    State::Undef => { *node = Node::Input(QubitId(k)); },
+                }
+            }
+        }
+        self
+    }
+
+    /// Apply a mid-circuit measurement post-selected to a given outcome.
+    ///
+    /// The measured qubit is projected into the outcome state and remains alive
+    /// for later operations.
+    ///
+    /// Passing [`State::Undef`] does nothing.
+    pub fn measure_postsel(&mut self, k: usize, outcome: State) -> &mut Self {
+        if k >= self.n { return self; }
+        match outcome {
+            State::Zero  => { insert_node!(self, k, NodeDef::X(0.0)); },
+            State::One   => { insert_node!(self, k, NodeDef::X(PI));  },
+            State::Plus  => { insert_node!(self, k, NodeDef::Z(0.0)); },
+            State::Minus => { insert_node!(self, k, NodeDef::Z(PI));  },
+            State::Undef => { }
+        }
+        self
+    }
+
+    /// Apply a Hadamard gate to the `k`-th qubit.
+    pub fn apply_h(&mut self, k: usize) -> &mut Self {
+        if k >= self.n { return self; }
+        insert_node!(self, k, NodeDef::h());
+        self
+    }
+
+    /// Apply an *X* gate to the `k`-th qubit.
+    pub fn apply_x(&mut self, k: usize) -> &mut Self {
+        if k >= self.n { return self; }
+        insert_node!(self, k, NodeDef::X(PI));
+        self
+    }
+
+    /// Apply a general rotation about *x* to the `k`-th qubit.
+    pub fn apply_xrot(&mut self, k: usize, ang: f64) -> &mut Self {
+        if k >= self.n { return self; }
+        insert_node!(self, k, NodeDef::X(ang));
+        self
+    }
+
+    /// Apply a *Z* gate to the `k`-qubit.
+    pub fn apply_z(&mut self, k: usize) -> &mut Self {
+        if k >= self.n { return self; }
+        insert_node!(self, k, NodeDef::Z(PI));
+        self
+    }
+
+    /// Apply a general rotation about *z* to the `k`-th qubit.
+    pub fn apply_zrot(&mut self, k: usize, ang: f64) -> &mut Self {
+        if k >= self.n { return self; }
+        insert_node!(self, k, NodeDef::Z(ang));
+        self
+    }
+
+    /// Apply a *X* gate to the `t`-th qubit, controlled in the *z* basis by the
+    /// `c`-th qubit.
+    pub fn apply_cx(&mut self, c: usize, t: usize) -> &mut Self {
+        if c >= self.n || t >= self.n || c == t { return self; }
+        let z = insert_node!(self, c, NodeDef::z());
+        let x = insert_node!(self, t, NodeDef::x());
+        self.diagram.add_wire(z, x).unwrap();
+        self
+    }
+
+    /// Apply a general rotation about *x* to the `t`-th qubit, controlled in
+    /// the *z* basis by the `c`-th qubit.
+    pub fn apply_cxrot(&mut self, c: usize, t: usize, ang: f64) -> &mut Self {
+        self.apply_h(t)
+            .apply_czrot(c, t, ang)
+            .apply_h(t)
+    }
+
+    /// Apply a controlled *Z* gate to the `a`-th and `b`-th qubits.
+    ///
+    /// This gate is symmetric with respect to its inputs.
+    pub fn apply_cz(&mut self, a: usize, b: usize) -> &mut Self {
+        if a >= self.n || b >= self.n || a == b { return self; }
+        let za = insert_node!(self, a, NodeDef::z());
+        let zb = insert_node!(self, b, NodeDef::z());
+        let h = self.diagram.add_node(NodeDef::h());
+        self.diagram.add_wire(za, h).unwrap();
+        self.diagram.add_wire(h, zb).unwrap();
+        self
+    }
+
+    /// Apply a general rotation about *z* to the `a`-th and `b`-th qubits.
+    ///
+    /// This gate is symmetric with respect to its inputs.
+    pub fn apply_czrot(&mut self, a: usize, b: usize, ang: f64) -> &mut Self {
+        if a >= self.n || b >= self.n || a == b { return self; }
+        let za = insert_node!(self, a, NodeDef::Z(ang / 2.0));
+        let zb = insert_node!(self, b, NodeDef::Z(ang / 2.0));
+        let x = self.diagram.add_node(NodeDef::x());
+        let z = self.diagram.add_node(NodeDef::Z(-ang / 2.0));
+        self.diagram.add_wire(za, x).unwrap();
+        self.diagram.add_wire(x, zb).unwrap();
+        self.diagram.add_wire(x, z).unwrap();
+        self
+    }
+
+    /// Apply a Mølmer-Sørensen gate to the `a`-th and `b`-th qubits.
+    ///
+    /// This gate is defined as a π/2 rotation about the *xx* axis in the
+    /// appropriate two-qubit space and is symmetric with respect to its inputs.
+    pub fn apply_molsor(&mut self, a: usize, b: usize) -> &mut Self {
+        if a >= self.n || b >= self.n || a == b { return self; }
+        let xa = insert_node!(self, a, NodeDef::X(PI2));
+        let xb = insert_node!(self, b, NodeDef::X(PI2));
+        let h = self.diagram.add_node(NodeDef::h());
+        self.diagram.add_wire(xa, h).unwrap();
+        self.diagram.add_wire(h, xb).unwrap();
+        self
+    }
+
+    /// Apply a swap gate to the `a`-th and `b`-th qubits.
+    ///
+    /// This gate is symmetric with respect to its inputs.
+    pub fn apply_swap(&mut self, a: usize, b: usize) -> &mut Self {
+        if a >= self.n || b >= self.n || a == b { return self; }
+        self.diagram.remove_wire(self.outs[a].wire).unwrap();
+        self.diagram.remove_wire(self.outs[b].wire).unwrap();
+        let mut tmp = NodeId(0);
+        std::mem::swap(&mut tmp, &mut self.outs[a].last);
+        std::mem::swap(&mut tmp, &mut self.outs[b].last);
+        std::mem::swap(&mut tmp, &mut self.outs[a].last);
+        self.outs[a].wire
+            = self.diagram.add_wire(self.outs[a].last, self.outs[a].out)
+            .unwrap();
+        self.outs[b].wire
+            = self.diagram.add_wire(self.outs[b].last, self.outs[b].out)
+            .unwrap();
+        self
+    }
+
+    /// Apply a √swap gate to the `a`-th and `b`-th qubits.
+    ///
+    /// This gate is symmetric with respect to its inputs.
+    pub fn apply_sqrt_swap(&mut self, a: usize, b: usize) -> &mut Self {
+        self.apply_cx(a, b)
+            .apply_h(a)
+            .apply_czrot(b, a, PI / 2.0)
+            .apply_h(a)
+            .apply_cx(a, b)
+
+        // if a >= self.n || b >= self.n || a == b { return self; }
+        // self.diagram.remove_wire(self.outs[a].wire).unwrap();
+        // self.diagram.remove_wire(self.outs[b].wire).unwrap();
+        // // first CX
+        // let cx0_z = self.diagram.add_node(NodeDef::z());
+        // let cx0_x = self.diagram.add_node(NodeDef::x());
+        // self.diagram.add_wire(cx0_z, cx0_x).unwrap();
+        // // middle CXRot
+        // let h0 = self.diagram.add_node(NodeDef::h());
+        // let czrot_z0 = self.diagram.add_node(NodeDef::Z(PI / 4.0));
+        // let czrot_z1 = self.diagram.add_node(NodeDef::Z(PI / 4.0));
+        // let czrot_z2 = self.diagram.add_node(NodeDef::Z(-PI / 4.0));
+        // let czrot_x = self.diagram.add_node(NodeDef::x());
+        // self.diagram.add_wire(czrot_z0, czrot_x).unwrap();
+        // self.diagram.add_wire(czrot_x, czrot_z1).unwrap();
+        // self.diagram.add_wire(czrot_x, czrot_z2).unwrap();
+        // let h1 = self.diagram.add_node(NodeDef::h());
+        // self.diagram.add_wire(h0, czrot_z0).unwrap();
+        // self.diagram.add_wire(czrot_z0, h1).unwrap();
+        // // second CX
+        // let cx1_z = self.diagram.add_node(NodeDef::z());
+        // let cx1_x = self.diagram.add_node(NodeDef::x());
+        // self.diagram.add_wire(cx1_z, cx1_x).unwrap();
+        // // inter-gate connections
+        // self.diagram.add_wire(cx0_z, h0).unwrap();
+        // self.diagram.add_wire(h1, cx1_z).unwrap();
+        // self.diagram.add_wire(cx0_x, czrot_z1).unwrap();
+        // self.diagram.add_wire(czrot_z1, cx1_x).unwrap();
+        //
+        // self.diagram.add_wire(self.outs[a].last, cx0_z).unwrap();
+        // self.diagram.add_wire(self.outs[b].last, cx0_x).unwrap();
+        // self.outs[a].wire
+        //     = self.diagram.add_wire(cx1_z, self.outs[a].out).unwrap();
+        // self.outs[b].wire
+        //     = self.diagram.add_wire(cx1_x, self.outs[b].out).unwrap();
+        // self.outs[a].last = cx1_z;
+        // self.outs[b].last = cx1_x;
+        // self
+    }
+
+    /// Apply a Toffoli gate to the `t`-th qubit, with qubits `c0` and `c1` as
+    /// the controls.
+    pub fn apply_toff(&mut self, c0: usize, c1: usize, t: usize) -> &mut Self {
+        let z0 = insert_node!(self, c0, NodeDef::z());
+        let z1 = insert_node!(self, c1, NodeDef::z());
+        let xt = insert_node!(self, t,  NodeDef::x());
+        let h0 = self.diagram.add_node(NodeDef::h());
+        let h1 = self.diagram.add_node(NodeDef::h());
+        self.diagram.add_wire(z0, h0).unwrap();
+        self.diagram.add_wire(z1, h0).unwrap();
+        self.diagram.add_wire(h0, h1).unwrap();
+        self.diagram.add_wire(h1, xt).unwrap();
+        self
+    }
+
+    /// Apply a gate.
+    // ///
+    // /// For gates not identified by [`Gate`], see
+    // /// [`apply_gate_diagram`][Self::apply_gate_diagram].
+    pub fn apply_gate(&mut self, gate: Gate) -> &mut Self {
+        match gate {
+            Gate::I                => self,
+            Gate::H(k)             => self.apply_h(k),
+            Gate::X(k)             => self.apply_x(k),
+            Gate::XRot(k, ang)     => self.apply_xrot(k, ang),
+            Gate::Z(k)             => self.apply_z(k),
+            Gate::ZRot(k, ang)     => self.apply_zrot(k, ang),
+            Gate::CX(c, t)         => self.apply_cx(c, t),
+            Gate::CXRot(c, t, ang) => self.apply_cxrot(c, t, ang),
+            Gate::CZ(a, b)         => self.apply_cz(a, b),
+            Gate::CZRot(c, t, ang) => self.apply_czrot(c, t, ang),
+            Gate::MolSor(a, b)     => self.apply_molsor(a, b),
+            Gate::Swap(a, b)       => self.apply_swap(a, b),
+            Gate::SqrtSwap(a, b)   => self.apply_sqrt_swap(a, b),
+            Gate::Toff(c0, c1, t)  => self.apply_toff(c0, c1, t),
+        }
+    }
+
+    /// Apply a sequence of gates.
+    pub fn apply_circuit<'a, I>(&mut self, gates: I) -> &mut Self
+    where I: IntoIterator<Item = &'a Gate>
+    {
+        gates.into_iter().copied().for_each(|g| { self.apply_gate(g); });
+        self
+    }
+
+    // pub fn apply_gate_diagram<G>(&mut self, gate: G) -> GraphResult<&mut Self>
+    // where G: GateDiagram
+    // {
+    //     todo!()
+    // }
+
+    /// Create a copy of `self` with swapped inputs and outputs, the signs of
+    /// all spiders' phases flipped, and all H-boxes' arguments conjugated.
+    pub fn adjoint(&self) -> Self {
+        self.clone().into_adjoint()
+    }
+
+    /// Swap inputs and outputs, flip the signs of all spiders' phases, and
+    /// conjugate all H-boxes' arguments, consuming `self`.
+    pub fn into_adjoint(mut self) -> Self {
+        self.adjoint_mut();
+        self
+    }
+
+    /// Swap inputs and outputs, flip the signs of all spiders' phases, and
+    /// conjugate all H-boxes' arguments, modifying `self` in place.
+    pub fn adjoint_mut(&mut self) -> &mut Self {
+        // here, input nodes are each guaranteed to have exactly one neighbor
+        let outs_new: Vec<OutWire>
+            = self.ins.iter().copied()
+            .map(|in_id| {
+                let (wire_id, wire)
+                    = self.diagram.wires_from(in_id).unwrap()
+                    .next().unwrap();
+                let inner_neighbor = wire.other_end_of(in_id).unwrap();
+                OutWire { last: inner_neighbor, wire: wire_id, out: in_id }
+            })
+            .collect();
+        let ins_new: Vec<NodeId>
+            = self.outs.iter().copied()
+            .map(|OutWire { last: _, wire: _, out }| out)
+            .collect();
+        self.diagram.adjoint_mut();
+        self.ins = ins_new;
+        self.outs = outs_new;
+        self
+    }
+
+    /// Return the tensor product of `self` and `other`.
+    pub fn tensor(&self, other: &Self) -> Self {
+        self.clone().into_tensor(other.clone())
+    }
+
+    /// Return the tensor product of `self` and `other`, consuming both.
+    pub fn into_tensor(mut self, other: Self) -> Self {
+        self.tensor_with(other);
+        self
+    }
+
+    /// Compute the tensor product of `self` and `other`, consuming `other` and
+    /// modifying `self` in place.
+    pub fn tensor_with(&mut self, other: Self) -> &mut Self {
+        let node_shift = self.diagram.node_id;
+        let edge_shift = self.diagram.edge_id;
+        let Self { n, diagram, mut ins, mut outs } = other;
+        self.n += n;
+        self.diagram.tensor_with(diagram);
+        ins.iter_mut().for_each(|n| { n.0 += node_shift; });
+        outs.iter_mut()
+            .for_each(|o| {
+                o.last.0 += node_shift;
+                o.wire.0 += edge_shift;
+                o.out.0 += node_shift;
+            });
+        self.ins.append(&mut ins);
+        self.outs.append(&mut outs);
+        self
+    }
+
+    /// Return the composition `self ∘ other`, attempting to match the outputs
+    /// of `other` to the inputs of `self` by [qubit ID][QubitId].
+    ///
+    /// This operation will fail if `self` and `other` contain different numbers
+    /// of qubits.
+    ///
+    /// See also [`compose_rev`][Self::compose_rev].
+    pub fn compose(&self, other: &Self) -> GraphResult<Self> {
+        if self.n != other.n { return Err(NonMatchingInputsOutputs); }
+        self.clone().into_compose(other.clone())
+    }
+
+    /// Return the composition `self ∘ other`, attempting to match the outputs
+    /// of `other` to the inputs of `self` by [qubit ID][QubitId], consuming
+    /// both.
+    ///
+    /// This operation will fail if `self` and `other` contain different numbers
+    /// of qubits.
+    ///
+    /// See also [`into_compose_rev`][Self::into_compose_rev].
+    pub fn into_compose(mut self, other: Self) -> GraphResult<Self> {
+        self.compose_with(other)?;
+        Ok(self)
+    }
+
+    /// Compute the composition `self ∘ other`, attempting to match the outputs
+    /// of `other` to the inputs of `self` by [qubit ID][QubitId], consuming
+    /// `other` and modifying `self` in place.
+    ///
+    /// This operation will fail if `self` and `other` contain different numbers
+    /// of qubits.
+    ///
+    /// See also [`compose_with_rev`][Self::compose_with_rev].
+    pub fn compose_with(&mut self, other: Self) -> GraphResult<&mut Self> {
+        if self.n != other.n { return Err(NonMatchingInputsOutputs); }
+        let Self { n: _, diagram, ins, outs: _ } = other;
+        self.diagram.compose_with(diagram)
+            .expect("unexpected composition error");
+        self.ins = ins;
+        Ok(self)
+    }
+
+    /// Return the composition `other ∘ self`, attempting to match the outputs
+    /// of `self` to the inputs of `other` by [qubit ID][QubitId].
+    ///
+    /// This operation will fail if `self` and `other` contain different numbers
+    /// of qubits.
+    ///
+    /// See also [`compose`][Self::compose].
+    pub fn compose_rev(&self, other: &Self) -> GraphResult<Self> {
+        if self.n != other.n { return Err(NonMatchingInputsOutputs); }
+        self.clone().into_compose_rev(other.clone())
+    }
+
+    /// Return the composition `other ∘ self`, attempting to match the outputs
+    /// of `self` to the inputs of `other` by [qubit ID][QubitId], consuming
+    /// both.
+    ///
+    /// This operation will fail if `self` and `other` contain different numbers
+    /// of qubits.
+    ///
+    /// See also [`into_compose`][Self::into_compose].
+    pub fn into_compose_rev(mut self, other: Self) -> GraphResult<Self> {
+        self.compose_with_rev(other)?;
+        Ok(self)
+    }
+
+    /// Compute the composition `other ∘ self`, attempting to match the outputs
+    /// of `self` to the inputs of `other` by [qubit ID][QubitId], consuming
+    /// `other` and modifying `self` in place.
+    ///
+    /// This operation will fail if `self` and `other` contain different numbers
+    /// of qubits.
+    ///
+    /// See also [`compose_with`][Self::compose_with].
+    pub fn compose_with_rev(&mut self, other: Self) -> GraphResult<&mut Self> {
+        if self.n != other.n { return Err(NonMatchingInputsOutputs); }
+        let Self { n: _, diagram, ins: _, outs } = other;
+        self.diagram.compose_with_rev(diagram)
+            .expect("unexpected composition error");
+        self.outs = outs;
+        Ok(self)
+    }
+
+    /// Apply a general circuit operation.
+    pub fn apply_op<O>(&mut self, op: O) -> &mut Self
+    where O: Into<CircuitOp>
+    {
+        match op.into() {
+            CircuitOp::Gate(gate)
+                => { self.apply_gate(gate) },
+            CircuitOp::Meas(Meas(k, outcome))
+                => { self.measure_postsel(k, outcome) },
+        }
+    }
+
+}
+
+/// A post-selected measurement performed on a given single qubit.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Meas(pub usize, pub State);
+
+/// A generic circuit operation.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum CircuitOp {
+    /// A unitary gate.
+    Gate(Gate),
+    /// A post-selected, single-qubit measurement.
+    Meas(Meas),
+}
+
+impl CircuitOp {
+    /// Return `true` if `self` is `Gate`.
+    pub fn is_gate(&self) -> bool { matches!(self, Self::Gate(_)) }
+
+    /// Return `true` if `self` is `Meas`.
+    pub fn is_meas(&self) -> bool { matches!(self, Self::Meas(_)) }
+}
+
+impl From<Gate> for CircuitOp {
+    fn from(gate: Gate) -> Self { Self::Gate(gate) }
+}
+
+impl From<Meas> for CircuitOp {
+    fn from(meas: Meas) -> Self { Self::Meas(meas) }
+}
+
+/// Create a [`CircuitDiagram`] using abbreviated syntax.
+///
+/// The first argument defines the number of qubits in the circuit, and the
+/// input states for any or all of them are defined in the following block.
+/// Circuit operations are subsequently applied using the
+/// [`CircuitDiagram::apply_op`] interface. This macro returns a single value of
+/// type `CircuitDiagram`.
+///
+/// # Arguments
+/// - `$n`: `usize`
+/// - `$qubit`: `usize`
+/// - `$state`: `impl Into<`[`State`]`>`
+/// - `$op`: `impl Into<`[`CircuitOp`]`>`
+///
+/// # Example
+/// The usage
+/// ```
+/// # use zx_calc::graph::*;
+/// use zx_calc::circuit_graph;
+///
+/// let outcome_a = State::Zero;
+/// let outcome_b = State::One;
+/// circuit_graph!(
+///     qubits: 3,
+///     inputs: { 1 => State::Zero, 2 => State::Zero },
+///     ops: {
+///         // prepare a Bell state on qubits 1 and 2
+///         Gate::H(1),
+///         Gate::CX(1, 2),
+///         // teleportation circuit
+///         Gate::CX(0, 1),
+///         Gate::H(0),
+///         Meas(0, outcome_a),
+///         Meas(1, outcome_b),
+///         if outcome_b == State::One { Gate::X(2) } else { Gate::I },
+///         if outcome_a == State::Zero { Gate::Z(2) } else { Gate::I },
+///     }
+/// );
+/// ```
+/// is equivalent to
+/// ```
+/// # use zx_calc::graph::*;
+/// let outcome_a = State::Zero;
+/// let outcome_b = State::One;
+///
+/// let mut diagram = CircuitDiagram::new(3);
+/// diagram.set_input(1, State::Zero);
+/// diagram.set_input(2, State::One);
+///
+/// // prepare a Bell state on qubits 1 and 2
+/// diagram.apply_op(Gate::H(1));
+/// diagram.apply_op(Gate::CX(1, 2));
+///
+/// // teleportation circuit
+/// diagram.apply_op(Gate::CX(0, 1));
+/// diagram.apply_op(Gate::H(0));
+/// diagram.apply_op(Meas(0, outcome_a));
+/// diagram.apply_op(Meas(1, outcome_b));
+/// diagram.apply_op(if outcome_b == State::One { Gate::X(2) } else { Gate::I });
+/// diagram.apply_op(if outcome_a == State::Zero { Gate::Z(2) } else { Gate::I });
+/// ```
+#[macro_export]
+macro_rules! circuit_graph {
+    (
+        qubits: $n:expr,
+        inputs: { $( $qubit:expr => $state:expr ),* $(,)? },
+        ops: { $( $op:expr ),* $(,)? } $(,)?
+    ) => {
+        {
+            let mut diagram = $crate::graph::CircuitDiagram::new($n);
+            $( diagram.set_input($qubit, $state); )*
+            $( diagram.apply_op($op); )*
+            diagram
         }
     }
 }

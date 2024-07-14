@@ -453,25 +453,24 @@ impl KetBra {
             )
             .filter_map(|(mut l, mut r)| {
                 let common: HashSet<usize>
-                    = Itertools::cartesian_product(
-                        l.bra.keys(),
-                        r.ket.keys(),
+                    = l.bra.keys()
+                    .filter_map(|l| r.ket.contains_key(l).then_some(*l))
+                    .chain(
+                        r.ket.keys()
+                        .filter_map(|r| l.bra.contains_key(r).then_some(*r))
                     )
-                    .filter_map(|(l, r)| (l == r).then_some(*l))
                     .collect();
-                let dot: f64
+                let dot: bool
                     = common.iter()
-                    .map(|idx| {
+                    .all(|idx| {
                         let ls: &State = l.bra.get(idx).unwrap();
-                        let rs: &State = r.ket.get(idx).unwrap();
-                        match (ls, rs) {
-                            (&Zero, &Zero) | (&One , &One ) => 1.0,
-                            (&Zero, &One ) | (&One , &Zero) => 0.0,
-                            _ => unreachable!()
-                        }
-                    })
-                    .product();
-                if dot.abs() < 1e-9 && !common.is_empty() {
+                        let rs: &State = r.bra.get(idx).unwrap();
+                        matches!(
+                            (ls, rs),
+                            (&Zero, &Zero) | (&One , &One )
+                        )
+                    });
+                if dot && !common.is_empty() {
                     None
                 } else {
                     common.iter().for_each(|idx| { l.bra.remove(idx); });
