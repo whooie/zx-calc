@@ -1,0 +1,6 @@
+- add circuit extraction
+- add wire types and additional graph normal forms (e.g. "graph-like" diagrams)
+- add "auto-simplifying" `add_wire` (will likely need to restrict to ZX only)
+- add non-ketbra-reliant scalar computation
+- add a specialized graph type for Clifford+T circuits that achieves efficient
+  computation/simplification guaranteed by the Gottesman-Knill theorem
