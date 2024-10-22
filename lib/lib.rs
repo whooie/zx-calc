@@ -4,12 +4,12 @@
 //! qubits and interfacing with the [ZX- and ZH-calculi][wiki].
 //!
 //! - [`circuit`] provides constructs for ordinary descriptions of quantum
-//! circuits using the conventional [circuit notation][qcircuits].
+//!   circuits using the conventional [circuit notation][qcircuits].
 //! - [`ketbra`] computes the complete linear maps or end products represented
-//! by diagrams in the ZX(H)-calculus based on naive manipulation of [kets and
-//! bras][dirac-bra-ket].
+//!   by diagrams in the ZX(H)-calculus based on naive manipulation of [kets and
+//!   bras][dirac-bra-ket].
 //! - [`mod@graph`] implements many rewrite rules in the calculus using proper
-//! graph-based representations, enabling automated diagram simplification.
+//!   graph-based representations, enabling automated diagram simplification.
 //!
 //! [wiki]: https://en.wikipedia.org/wiki/ZX-calculus
 //! [qcircuits]: https://en.wikipedia.org/wiki/Quantum_circuit
@@ -17,24 +17,29 @@
 //!
 //! # See also
 //! - [PyZX](https://github.com/Quantomatic/pyzx): a Python implementation of
-//! the ZX-calculus and its rewrite rules.
+//!   the ZX-calculus and its rewrite rules.
 //! - [QuiZX](https://github.com/Quantomatic/quizx/tree/master): a Rust
-//! implementation of the above.
+//!   implementation of the above.
 //!
 //! # Further reading
 //! - J. van de Wetering, "ZX-calculus for the working quantum computer
-//! scientist." [arXiv:2012.13966](https://arxiv.org/abs/2012.13966)
+//!   scientist." [arXiv:2012.13966](https://arxiv.org/abs/2012.13966)
 //! - B. Coecke, "Basic ZX-calculus for students and professionals."
-//! [arXiv:2303.03163](https://arxiv.org/abs/2303.03163)
+//!   [arXiv:2303.03163](https://arxiv.org/abs/2303.03163)
 //! - R. Moyard, "Introduction to the ZX-calculus."
-//! [Pennylane](https://pennylane.ai/qml/demos/tutorial_zx_calculus/)
+//!   [Pennylane](https://pennylane.ai/qml/demos/tutorial_zx_calculus/)
 //! - H. Bombin *et al.*, "Unifying flavors of fault tolerance with the ZX
-//! calculus." [arXiv:2303.08829](https://arxiv.org/abs/2303.08829)
+//!   calculus." [arXiv:2303.08829](https://arxiv.org/abs/2303.08829)
 //!
 
 pub mod circuit;
+pub mod phase;
+pub mod complex;
 pub mod ketbra;
+pub mod ketbra2;
 pub mod graph;
+pub mod graph2;
+pub mod tensor;
 pub(crate) mod vizdefs;
 
 /// Re-exported for use with the [`c!`] macro.

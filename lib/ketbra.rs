@@ -114,8 +114,8 @@ impl State {
     /// Convert `self` to the appropriate basis as an [`Element`] representing a
     /// state (ket) on a single wire.
     pub fn to_ket(self, idx: usize, basis: Basis) -> Element {
-        let ketbras: Vec<KetBra>
-            = match (basis, self) {
+        let ketbras: Vec<KetBra> =
+            match (basis, self) {
                 (Basis::Z, Zero ) | (Basis::Z, One  ) => vec![
                     KetBra::new(c!(1.0), [(idx, self)], []),
                 ],
@@ -145,8 +145,8 @@ impl State {
     /// Convert `self` to the appropriate basis as in [`Element`] representing
     /// an effect (bra) on a single wire.
     pub fn to_bra(self, idx: usize, basis: Basis) -> Element {
-        let ketbras: Vec<KetBra>
-            = match (basis, self) {
+        let ketbras: Vec<KetBra> =
+            match (basis, self) {
                 (Basis::Z, Zero ) | (Basis::Z, One  ) => vec![
                     KetBra::new(c!(1.0), [], [(idx, self)])
                 ],
@@ -230,8 +230,8 @@ impl KetBra {
             self.clone().into()
         } else {
             let KetBra { ampl, ket, bra } = self;
-            let terms: Vec<KetBra>
-                = Iterator::chain(
+            let terms: Vec<KetBra> =
+                Iterator::chain(
                     ket.iter().map(|(idx, s)| (*s).to_ket(*idx, basis)),
                     bra.iter().map(|(idx, s)| (*s).to_bra(*idx, basis)),
                 )
@@ -256,8 +256,8 @@ impl KetBra {
             self.into()
         } else {
             let KetBra { ampl, ket, bra } = self;
-            let terms: Vec<KetBra>
-                = Iterator::chain(
+            let terms: Vec<KetBra> =
+                Iterator::chain(
                     ket.into_iter().map(|(idx, s)| s.to_ket(idx, basis)),
                     bra.into_iter().map(|(idx, s)| s.to_bra(idx, basis)),
                 )
@@ -406,8 +406,8 @@ impl KetBra {
     /// The product must not leave multiple states on the same wire.
     pub fn dot(&self, rhs: &Self) -> KBResult<Element> {
         // check for duplicate kets in result
-        let mut wire_counts: HashMap<usize, isize>
-            = self.ket.keys().map(|idx| (*idx, 1)).collect();
+        let mut wire_counts: HashMap<usize, isize> =
+            self.ket.keys().map(|idx| (*idx, 1)).collect();
         self.bra.keys()
             .for_each(|idx| {
                 wire_counts.entry(*idx)
@@ -446,22 +446,22 @@ impl KetBra {
             return Err(KBError::DotDuplicateBraKey(*idx));
         }
 
-        let terms: Vec<KetBra>
-            = Itertools::cartesian_product(
+        let terms: Vec<KetBra> =
+            Itertools::cartesian_product(
                 self.to_basis(Basis::Z).into_iter(),
                 rhs.to_basis(Basis::Z).into_iter(),
             )
             .filter_map(|(mut l, mut r)| {
-                let common: HashSet<usize>
-                    = l.bra.keys()
+                let common: HashSet<usize> =
+                    l.bra.keys()
                     .filter_map(|l| r.ket.contains_key(l).then_some(*l))
                     .chain(
                         r.ket.keys()
                         .filter_map(|r| l.bra.contains_key(r).then_some(*r))
                     )
                     .collect();
-                let dot: bool
-                    = common.iter()
+                let dot: bool =
+                    common.iter()
                     .all(|idx| {
                         let ls: &State = l.bra.get(idx).unwrap();
                         let rs: &State = r.bra.get(idx).unwrap();
@@ -601,8 +601,8 @@ trait LogicalStateOrd {
 
 impl LogicalStateOrd for HashMap<usize, State> {
     fn state_ord(&self, rhs: &Self) -> Ordering {
-        let mut common: Vec<&usize>
-            = self.keys().collect::<HashSet<&usize>>()
+        let mut common: Vec<&usize> =
+            self.keys().collect::<HashSet<&usize>>()
             .union(&rhs.keys().collect::<HashSet<&usize>>())
             .copied()
             .collect();
@@ -651,8 +651,8 @@ impl Element {
     where I: IntoIterator<Item = KetBra>
     {
         let ketbras: Vec<KetBra> = ketbras.into_iter().collect();
-        let ket_idx: HashSet<&usize>
-            = ketbras.iter().flat_map(|kb| kb.ket.keys()).collect();
+        let ket_idx: HashSet<&usize> =
+            ketbras.iter().flat_map(|kb| kb.ket.keys()).collect();
         ketbras.iter()
             .all(|kb| {
                 let ket_keys: HashSet<&usize> = kb.ket.keys().collect();
@@ -660,8 +660,8 @@ impl Element {
             })
             .then_some(())
             .ok_or(KBError::ElementKetSameKeys)?;
-        let bra_idx: HashSet<&usize>
-            = ketbras.iter().flat_map(|kb| kb.bra.keys()).collect();
+        let bra_idx: HashSet<&usize> =
+            ketbras.iter().flat_map(|kb| kb.bra.keys()).collect();
         ketbras.iter()
             .all(|kb| {
                 let bra_keys: HashSet<&usize> = kb.bra.keys().collect();
@@ -777,8 +777,8 @@ impl Element {
 
     /// Express all of `self`'s terms in `basis`, simplifying the results.
     pub fn to_basis(&self, basis: Basis) -> Self {
-        let terms: Vec<KetBra>
-            = self.terms.iter()
+        let terms: Vec<KetBra> =
+            self.terms.iter()
             .flat_map(|kb| kb.to_basis(basis))
             .collect();
         Self {
@@ -876,14 +876,14 @@ impl Element {
         let a: C64 = a.unwrap_or(c!(-1.0));
         let ins: HashSet<usize> = ins.into_iter().collect();
         let outs: HashSet<usize> = outs.into_iter().collect();
-        let terms: Vec<KetBra>
-            = if ins.is_empty() {
+        let terms: Vec<KetBra> =
+            if ins.is_empty() {
                 outs.into_iter()
                     .map(|idx| [(idx, Zero), (idx, One)])
                     .multi_cartesian_product()
                     .map(|outs| {
-                        let ampl: C64
-                            = outs.iter()
+                        let ampl: C64 =
+                            outs.iter()
                             .any(|(_, s)| *s == Zero)
                             .then_some(c!(1.0))
                             .unwrap_or(a);
@@ -895,8 +895,8 @@ impl Element {
                     .map(|idx| [(idx, Zero), (idx, One)])
                     .multi_cartesian_product()
                     .map(|ins| {
-                        let ampl: C64
-                            = ins.iter()
+                        let ampl: C64 =
+                            ins.iter()
                             .any(|(_, s)| *s == Zero)
                             .then_some(c!(1.0))
                             .unwrap_or(a);
@@ -913,8 +913,8 @@ impl Element {
                         .multi_cartesian_product(),
                 )
                 .map(|(ins, outs)| {
-                    let ampl: C64
-                        = ins.iter().chain(outs.iter())
+                    let ampl: C64 =
+                        ins.iter().chain(outs.iter())
                         .any(|(_, s)| *s == Zero)
                         .then_some(c!(1.0))
                         .unwrap_or(a);
@@ -943,8 +943,8 @@ impl Element {
         if i0 == i1 {
             return Self::id(i0);
         }
-        let terms: Vec<KetBra>
-            = vec![
+        let terms: Vec<KetBra> =
+            vec![
                 KetBra::new(
                     c!(1.0),
                     [(i0, Zero), (i1, Zero)],
@@ -1037,8 +1037,8 @@ impl Element {
     /// within `self` and `rhs`'s kets and bras must be disjoint, otherwise this
     /// operation fails.
     pub fn kron(&self, rhs: &Self) -> KBResult<Self> {
-        let terms: Vec<KetBra>
-            = Itertools::cartesian_product(
+        let terms: Vec<KetBra> =
+            Itertools::cartesian_product(
                 self.terms.iter(),
                 rhs.terms.iter(),
             )
@@ -1055,8 +1055,8 @@ impl Element {
     pub fn multikron<'a, I>(elems: I) -> KBResult<Self>
     where I: IntoIterator<Item = &'a Element>
     {
-        let terms: Vec<KetBra>
-            = elems.into_iter()
+        let terms: Vec<KetBra> =
+            elems.into_iter()
             .cloned()
             .multi_cartesian_product()
             .map(KetBra::into_multikron)
@@ -1073,8 +1073,8 @@ impl Element {
     pub fn into_multikron<I>(elems: I) -> KBResult<Self>
     where I: IntoIterator<Item = Element>
     {
-        let terms: Vec<KetBra>
-            = elems.into_iter()
+        let terms: Vec<KetBra> =
+            elems.into_iter()
             .multi_cartesian_product()
             .map(KetBra::into_multikron)
             .collect::<KBResult<Vec<KetBra>>>()?;
@@ -1087,8 +1087,8 @@ impl Element {
     /// product. See also [`KetBra::dot`]. The product must not leave multiple
     /// states on the same wire.
     pub fn dot(&self, rhs: &Self) -> KBResult<Self> {
-        let terms: Vec<KetBra>
-            = Itertools::cartesian_product(
+        let terms: Vec<KetBra> =
+            Itertools::cartesian_product(
                 self.terms.iter(),
                 rhs.terms.iter(),
             )
@@ -1347,8 +1347,8 @@ impl Diagram {
         inputs.sort();
         let mut outputs: Vec<usize> = outs.into_iter().collect();
         outputs.sort();
-        let mut wires
-            = HashMap::<usize, graph::NodeId>::default(); // wire idx -> node idx
+        let mut wires =
+            HashMap::<usize, graph::NodeId>::default(); // wire idx -> node idx
         let mut to_remove: Vec<graph::NodeId> = Vec::new(); // placeholder nodes
 
         // add inputs
@@ -1361,8 +1361,8 @@ impl Diagram {
         for elem in self.slices.iter() {
             match elem.kind {
                 ElementKind::Z(_) | ElementKind::X(_) | ElementKind::H(_) => {
-                    let node_def: graph::NodeDef
-                        = match elem.kind {
+                    let node_def: graph::NodeDef =
+                        match elem.kind {
                             ElementKind::Z(ph) => graph::NodeDef::Z(ph),
                             ElementKind::X(ph) => graph::NodeDef::X(ph),
                             ElementKind::H(a) => graph::NodeDef::H(a),
@@ -1448,8 +1448,8 @@ impl Diagram {
         let mut node_id: usize;
 
         // initial declarations
-        let mut statements
-            = StmtList::new()
+        let mut statements =
+            StmtList::new()
             .add_attr(
                 AttrType::Graph,
                 AttrList::new().add_pair(rankdir(RankDir::LR)),
@@ -1466,8 +1466,8 @@ impl Diagram {
         let mut wires = HashMap::<usize, usize>::default(); // wire idx -> node id
 
         // ensure all inputs are in a subgraph at the same rank
-        let mut inputs_subgraph_stmt
-            = StmtList::new()
+        let mut inputs_subgraph_stmt =
+            StmtList::new()
             .add_attr(
                 AttrType::Graph,
                 AttrList::new().add_pair(rank(RankType::Source)),
@@ -1517,8 +1517,8 @@ impl Diagram {
                 | ElementKind::Unknown
                 => {
                     node_id = id_gen.next().unwrap();
-                    let attrs
-                        = match elem.kind {
+                    let attrs =
+                        match elem.kind {
                             ElementKind::Z(ph) => {
                                 AttrList::new()
                                     .add_pair(label(format_phase(ph)))
@@ -1536,8 +1536,8 @@ impl Diagram {
                                     .add_pair(fillcolor(X_COLOR))
                             },
                             ElementKind::H(a) => {
-                                let a_label
-                                    = if a == c!(-1.0) {
+                                let a_label =
+                                    if a == c!(-1.0) {
                                         "".to_string()
                                     } else {
                                         format!("{}", a)
@@ -1550,8 +1550,8 @@ impl Diagram {
                                     .add_pair(fillcolor(H_COLOR))
                             },
                             ElementKind::Unknown => {
-                                let u_label
-                                    = format!(
+                                let u_label =
+                                    format!(
                                         "U{}",
                                         subscript_str(u_idx.next().unwrap())
                                     );
@@ -1591,14 +1591,14 @@ impl Diagram {
                 },
                 ElementKind::Cup(w1, w2) => {
                     let n1 = id_gen.next().unwrap();
-                    let attrs1
-                        = AttrList::new().add_pair(style(Style::Invisible));
+                    let attrs1 =
+                        AttrList::new().add_pair(style(Style::Invisible));
                     statements
                         = statements.add_node(n1.into(), None, Some(attrs1));
                     wires.insert(w1, n1);
                     let n2 = id_gen.next().unwrap();
-                    let attrs2
-                        = AttrList::new().add_pair(style(Style::Invisible));
+                    let attrs2 =
+                        AttrList::new().add_pair(style(Style::Invisible));
                     statements
                         = statements.add_node(n2.into(), None, Some(attrs2));
                     wires.insert(w2, n2);
@@ -1633,8 +1633,8 @@ impl Diagram {
         }
 
         // ensure all outputs are in a subgraph at the same rank
-        let mut outputs_subgraph_stmt
-            = StmtList::new()
+        let mut outputs_subgraph_stmt =
+            StmtList::new()
             .add_attr(
                 AttrType::Graph,
                 AttrList::new().add_pair(rank(RankType::Sink)),
