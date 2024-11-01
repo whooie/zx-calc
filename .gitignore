@@ -2,6 +2,8 @@ Cargo.lock
 **/target/*
 **.png
 **.svg
+!assets/logo.svg
+!assets/rules/*.svg
 **.pdf
 src/*
 *.gv

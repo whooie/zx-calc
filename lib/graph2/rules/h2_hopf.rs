@@ -1,7 +1,9 @@
 use super::*;
 
-/// Two spiders of the same color and arbitrary arity and phase with exactly two
-/// adjoining wires, each with a single H-box with default argument.
+/// Remove Hadamard wires in pairs between two spiders of the same color.
+///
+/// ![h2hopf][h2hopf]
+#[embed_doc_image::embed_doc_image("h2hopf", "assets/rules/H2Hopf.svg")]
 #[derive(Copy, Clone, Debug)]
 pub struct H2Hopf;
 

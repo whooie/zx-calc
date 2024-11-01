@@ -1,6 +1,9 @@
 use super::*;
 
-/// Any spider of either color with one or more self-loops.
+/// Remove all empty wires connecting a spider to itself.
+///
+/// ![spider_self_loop][spider_self_loop]
+#[embed_doc_image::embed_doc_image("spider_self_loop", "assets/rules/SpiderSelfLoop.svg")]
 #[derive(Copy, Clone, Debug)]
 pub struct SpiderSelfLoop;
 

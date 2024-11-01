@@ -1,23 +1,26 @@
 use super::*;
 
-/// Either a phaseless spider with two wires or two adjacent H-boxes of arity 2
-/// and default argument.
-#[derive(Copy, Clone, Debug)]
+/// Replace a phaseless binary spider or two adjacent binary H-boxes with an
+/// empty wire.
+///
+/// ![identity][identity]
+#[embed_doc_image::embed_doc_image("identity", "assets/rules/Identity.svg")]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Identity;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum IdentityKind {
+    Spider(NodeId),
+//  Spider(spider)
+    HBox(NodeId, NodeId),
+//  HBox(hbox1, hbox2)
+}
 
 /// Output of [`Identity::find`].
 #[derive(Debug)]
 pub struct IdentityData<'a> {
     pub(crate) dg: &'a mut Diagram,
     pub(crate) kind: IdentityKind,
-}
-
-#[derive(Debug)]
-pub(crate) enum IdentityKind {
-    Spider(NodeId),
-//  Spider(spider)
-    HBox(NodeId, NodeId),
-//  HBox(hbox1, hbox2)
 }
 
 impl RuleSeal for Identity { }
@@ -56,21 +59,19 @@ impl<'a> Rule for IdentityData<'a> {
                 let mut nb_iter = dg.neighbors_of(s).unwrap().map(fst);
                 let nb1 = nb_iter.next().unwrap();
                 if let Some(nb2) = nb_iter.next() {
-                    // not a dg-neighbor
+                    // not a self-neighbor
                     dg.remove_node(s).unwrap();
                     dg.add_wire(nb1, nb2).unwrap();
                 } else {
-                    // dg-neighbor
+                    // self-neighbor
                     dg.remove_node(s).unwrap();
                 }
             },
             IdentityKind::HBox(h1, h2) => {
                 let mut nb_iter =
-                    dg.neighbors_of(h1).unwrap()
-                    .chain(dg.neighbors_of(h2).unwrap())
-                    .filter_map(|(id, _)| {
-                        (id != h1 && id != h2).then_some(id)
-                    });
+                    dg.neighbor_ids_of(h1).unwrap()
+                    .chain(dg.neighbor_ids_of(h2).unwrap())
+                    .filter(|id| *id != h1 && *id != h2);
                 if let Some(nb1) = nb_iter.next() {
                     let nb2 = nb_iter.next().unwrap();
                     dg.remove_node(h1).unwrap();

@@ -1,9 +1,77 @@
+use num_complex::Complex64 as C64;
+use crate::phase::Phase;
 use super::*;
 
-/// An arbitrary number `n` of H-boxes, each with arity 1, connected to a
-/// phaseless Z-spider of arity `n + 1`.
-#[derive(Clone, Debug)]
-pub struct HStateMul(Vec<NodeId>, NodeId);
-//         HStateMul(hboxes, spider)
+/// Merge at unary H-boxes connected to the same Z-spider into one, multiplying
+/// their arguments.
+///
+/// ![h_state_mul][h_state_mul]
+#[embed_doc_image::embed_doc_image("h_state_mul", "assets/rules/HStateMul.svg")]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct HStateMul;
 
+/// Output of [`HStateMul::find`].
+#[derive(Debug)]
+pub struct HStateMulData<'a> {
+    pub(crate) dg: &'a mut Diagram,
+    pub(crate) s: NodeId, // spider
+    pub(crate) hh: Vec<(NodeId, C64)>, // h-boxes
+}
+
+impl RuleSeal for HStateMul { }
+impl RuleFinder for HStateMul {
+    type Output<'a> = HStateMulData<'a>;
+
+    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+        let mut hh: Vec<(NodeId, C64)> = Vec::new();
+        for (id, node) in dg.nodes_inner() {
+            if node.is_z() {
+                dg.neighbors_of_inner(id).unwrap()
+                    .filter(|(id2, node2)| {
+                        node2.is_h() && dg.arity(*id2).unwrap() == 1
+                    })
+                    .for_each(|(id2, node2)| {
+                        hh.push((id2, node2.arg().unwrap()));
+                    });
+            }
+            if hh.len() > 1 {
+                return Some(HStateMulData { dg, s: id, hh });
+            } else if !hh.is_empty() {
+                hh.clear();
+            }
+        }
+        None
+    }
+}
+
+impl<'a> RuleSeal for HStateMulData<'a> { }
+impl<'a> Rule for HStateMulData<'a> {
+    fn simplify(self) {
+        let Self { dg, s, mut hh } = self;
+        if dg.arity(s).unwrap() == hh.len() + 1
+            && dg.get_node(s).unwrap().phase().unwrap() == Phase::zero()
+        {
+            let a_prod: C64 =
+                hh.into_iter()
+                .map(|(id, a_k)| {
+                    dg.remove_node(id).unwrap();
+                    a_k
+                })
+                .product();
+            let n = dg.get_node_mut(s).unwrap();
+            *n = Node::H(a_prod);
+        } else {
+            let (h0, _) = hh.pop().unwrap();
+            let a_prod: C64 =
+                hh.into_iter()
+                .map(|(id, a_k)| {
+                    dg.remove_node(id).unwrap();
+                    a_k
+                })
+                .product();
+            dg.get_node_mut(h0).unwrap()
+                .map_arg(|a0| a0 * a_prod);
+        }
+    }
+}
 

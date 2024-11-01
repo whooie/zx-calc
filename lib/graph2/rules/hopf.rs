@@ -1,7 +1,9 @@
 use super::*;
 
-/// Two spiders of opposite color and arbitrary arity and phase with exactly two
-/// adjoining wires.
+/// Remove wires in pairs between two spiders of opposite colors.
+///
+/// ![hopf][hopf]
+#[embed_doc_image::embed_doc_image("hopf", "assets/rules/Hopf.svg")]
 #[derive(Copy, Clone, Debug)]
 pub struct Hopf;
 

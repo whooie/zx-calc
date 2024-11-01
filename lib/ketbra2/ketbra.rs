@@ -1,7 +1,6 @@
 use std::fmt;
 use itertools::Itertools;
 use num_complex::Complex64 as C64;
-use rustc_hash::FxHashSet;
 use crate::ketbra2::{
     Basis,
     Element,
@@ -126,7 +125,7 @@ impl KetBra {
         let mut ampl = self.ampl * rhs.ampl;
         let mut ket = self.ket.clone();
         let mut bra = rhs.bra.clone();
-        let matched: FxHashSet<usize> =
+        let matched: Vec<usize> =
             self.bra.iter()
             .filter_map(|(id, s_l)| {
                 if let Some(s_r) = rhs.ket.get(id) {
@@ -166,7 +165,7 @@ impl KetBra {
         let mut ampl = self.ampl * rhs.ampl;
         let mut ket = self.ket;
         let mut bra = rhs.bra;
-        let matched: FxHashSet<usize> =
+        let matched: Vec<usize> =
             self.bra.into_iter()
             .filter_map(|(id, s_l)| {
                 if let Some(s_r) = rhs.ket.get(id) {
@@ -366,7 +365,7 @@ enum DecompIter {
         item: (usize, C64, State),
     },
     Two {
-        yielded: Option<bool>,
+        yielded: Option<bool>, // ≅ 1 + 2 = 3
         item0: (usize, C64, State),
         item1: (usize, C64, State),
     },
@@ -397,6 +396,50 @@ impl Iterator for DecompIter {
                 }
             },
         }
+    }
+}
+
+impl std::ops::MulAssign<C64> for KetBra {
+    fn mul_assign(&mut self, z: C64) { self.ampl *= z; }
+}
+
+impl std::ops::Mul<C64> for KetBra {
+    type Output = KetBra;
+
+    fn mul(mut self, z: C64) -> Self::Output {
+        self *= z;
+        self
+    }
+}
+
+impl std::ops::Mul<KetBra> for C64 {
+    type Output = KetBra;
+
+    fn mul(self, mut rhs: KetBra) -> Self::Output {
+        rhs *= self;
+        rhs
+    }
+}
+
+impl std::ops::MulAssign<f64> for KetBra {
+    fn mul_assign(&mut self, z: f64) { self.ampl *= z; }
+}
+
+impl std::ops::Mul<f64> for KetBra {
+    type Output = KetBra;
+
+    fn mul(mut self, z: f64) -> Self::Output {
+        self *= z;
+        self
+    }
+}
+
+impl std::ops::Mul<KetBra> for f64 {
+    type Output = KetBra;
+
+    fn mul(self, mut rhs: KetBra) -> Self::Output {
+        rhs *= self;
+        rhs
     }
 }
 

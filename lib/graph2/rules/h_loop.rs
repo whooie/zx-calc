@@ -1,8 +1,11 @@
 use crate::phase::Phase;
 use super::*;
 
-/// A spider of arbitrary arity and phase with a single self-loop containing a
-/// single H-box with default argument.
+/// A specific case of [`HEuler`], removing Hadamard wires connecting a spider
+/// to itself and adding π to the spider's phase for each wire removed.
+///
+/// ![h_loop][h_loop]
+#[embed_doc_image::embed_doc_image("h_loop", "assets/rules/HLoop.svg")]
 #[derive(Copy, Clone, Debug)]
 pub struct HLoop;
 

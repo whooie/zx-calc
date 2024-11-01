@@ -1,4 +1,20 @@
-#![allow(unused_imports)]
+//! Rewrite rules for diagram simplification.
+//!
+//! Application of particular rules is facilitated through the [`RuleFinder`]
+//! and [`Rule`] traits. Usually their methods are not called as such; a
+//! particular rule is instead represented by a type implementing `RuleFinder`,
+//! which is passed to [`Diagram::find_rule`], [`Diagram::simplify_rule`], or
+//! [`Diagram::simplify_rule_n`].
+//!
+//! Rules are chosen to prefer the elimination of wires and H-boxes, and convert
+//! X-spiders to Z-spiders where possible.
+//!
+//! See [`Simplify`] for a master list of all simplify rules combined into a
+//! single type.
+//!
+//! # Example
+//!
+//! TODO
 
 use crate::graph2::{ NodeId, Diagram, node::Node };
 
@@ -51,48 +67,95 @@ pub trait Rule: private::RuleSeal {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Simplify {
     // ZX
+    /// [`Bialgebra`]
     Bialgebra,
-    BitBialgebra,
+    /// [`ColorFlip`]
     ColorFlip,
+    /// [`ColorFlipAll`]
     ColorFlipAll,
+    /// [`Fuse`]
     Fuse,
+    /// [`FuseAll`]
     FuseAll,
+    /// [`FuseMulti`]
+    FuseMulti,
+    /// [`H2Hopf`]
     H2Hopf,
+    /// [`HEuler`]
     HEuler,
+    /// [`HEulerColorFlip`]
     HEulerColorFlip,
+    /// [`HLoop`]
     HLoop,
+    /// [`HMove`]
     HMove,
+    /// [`HSelfLoop`]
     HSelfLoop,
+    /// [`HSelfLoopAll`]
     HSelfLoopAll,
+    /// [`Hopf`]
     Hopf,
+    /// [`IState`]
+    IState,
+    /// [`IStateAll`]
+    IStateAll,
+    /// [`Identity`]
     Identity,
+    /// [`IdentityAll`]
     IdentityAll,
-    Istate,
+    /// [`PhaseNeg`]
     PhaseNeg,
+    /// [`PhaseNegAll`]
     PhaseNegAll,
-    PiBookend,
+    /// [`PiCommute`]
     PiCommute,
+    /// [`ScalarPair`]
+    ScalarPair,
+    /// [`ScalarPairAll`]
+    ScalarPairAll,
+    /// [`SpiderSelfLoop`]
     SpiderSelfLoop,
+    /// [`SpiderSelfLoopAll`]
     SpiderSelfLoopAll,
+    /// [`StateCopy`]
     StateCopy,
+    /// [`StateCopyAll`]
+    StateCopyAll,
 
     // ZH
+    /// [`HAbsorb`]
     HAbsorb,
+    /// [`HAbsorbAll`]
     HAbsorbAll,
+    /// [`HAvg`]
     HAvg,
+    /// [`HBialgebra`]
     HBialgebra,
+    /// [`HExplode`]
     HExplode,
+    /// [`HExplodeAll`]
     HExplodeAll,
+    /// [`HFuse`]
     HFuse,
+    /// [`HHopf`]
     HHopf,
+    /// [`HIntro`]
     HIntro,
+    /// [`HMultiState`]
     HMultiState,
+    /// [`HMultiStateAll`]
     HMultiStateAll,
+    /// [`HState`]
     HState,
+    /// [`HStateAll`]
     HStateAll,
+    /// [`HStateCopy`]
     HStateCopy,
+    /// [`HStateCopyAll`]
     HStateCopyAll,
+    /// [`HStateMul`]
     HStateMul,
+    /// [`HStateMulAll`]
     HStateMulAll,
 }
 
@@ -101,29 +164,207 @@ impl RuleFinder for Simplify {
     type Output<'a> = SimplifyData<'a>;
 
     #[allow(unused_variables, unused_mut)]
-    fn find(self, diagram: &mut Diagram) -> Option<Self::Output<'_>> {
-        todo!()
+    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+        match self {
+            Self::Bialgebra         => Some(SimplifyData::Bialgebra(Bialgebra.find(dg)?)),
+            Self::ColorFlip         => Some(SimplifyData::ColorFlip(ColorFlip.find(dg)?)),
+            Self::ColorFlipAll      => Some(SimplifyData::ColorFlipAll(ColorFlipAll.find(dg)?)),
+            Self::Fuse              => Some(SimplifyData::Fuse(Fuse.find(dg)?)),
+            Self::FuseAll           => Some(SimplifyData::FuseAll(FuseAll.find(dg)?)),
+            Self::FuseMulti         => Some(SimplifyData::FuseMulti(FuseMulti.find(dg)?)),
+            Self::H2Hopf            => Some(SimplifyData::H2Hopf(H2Hopf.find(dg)?)),
+            Self::HEuler            => Some(SimplifyData::HEuler(HEuler.find(dg)?)),
+            Self::HEulerColorFlip   => Some(SimplifyData::HEulerColorFlip(HEulerColorFlip.find(dg)?)),
+            Self::HLoop             => Some(SimplifyData::HLoop(HLoop.find(dg)?)),
+            Self::HMove             => Some(SimplifyData::HMove(HMove.find(dg)?)),
+            Self::HSelfLoop         => Some(SimplifyData::HSelfLoop(HSelfLoop.find(dg)?)),
+            Self::HSelfLoopAll      => Some(SimplifyData::HSelfLoopAll(HSelfLoopAll.find(dg)?)),
+            Self::Hopf              => Some(SimplifyData::Hopf(Hopf.find(dg)?)),
+            Self::IState            => Some(SimplifyData::IState(IState.find(dg)?)),
+            Self::IStateAll         => Some(SimplifyData::IStateAll(IStateAll.find(dg)?)),
+            Self::Identity          => Some(SimplifyData::Identity(Identity.find(dg)?)),
+            Self::IdentityAll       => Some(SimplifyData::IdentityAll(IdentityAll.find(dg)?)),
+            Self::PhaseNeg          => Some(SimplifyData::PhaseNeg(PhaseNeg.find(dg)?)),
+            Self::PhaseNegAll       => Some(SimplifyData::PhaseNegAll(PhaseNegAll.find(dg)?)),
+            Self::PiCommute         => Some(SimplifyData::PiCommute(PiCommute.find(dg)?)),
+            Self::ScalarPair        => Some(SimplifyData::ScalarPair(ScalarPair.find(dg)?)),
+            Self::ScalarPairAll     => Some(SimplifyData::ScalarPairAll(ScalarPairAll.find(dg)?)),
+            Self::SpiderSelfLoop    => Some(SimplifyData::SpiderSelfLoop(SpiderSelfLoop.find(dg)?)),
+            Self::SpiderSelfLoopAll => Some(SimplifyData::SpiderSelfLoopAll(SpiderSelfLoopAll.find(dg)?)),
+            Self::StateCopy         => Some(SimplifyData::StateCopy(StateCopy.find(dg)?)),
+            Self::StateCopyAll      => Some(SimplifyData::StateCopyAll(StateCopyAll.find(dg)?)),
+            Self::HAbsorb           => Some(SimplifyData::HAbsorb(HAbsorb.find(dg)?)),
+            Self::HAbsorbAll        => Some(SimplifyData::HAbsorbAll(HAbsorbAll.find(dg)?)),
+            Self::HAvg              => Some(SimplifyData::HAvg(HAvg.find(dg)?)),
+            Self::HBialgebra        => Some(SimplifyData::HBialgebra(HBialgebra.find(dg)?)),
+            Self::HExplode          => Some(SimplifyData::HExplode(HExplode.find(dg)?)),
+            Self::HExplodeAll       => Some(SimplifyData::HExplodeAll(HExplodeAll.find(dg)?)),
+            Self::HFuse             => Some(SimplifyData::HFuse(HFuse.find(dg)?)),
+            Self::HHopf             => Some(SimplifyData::HHopf(HHopf.find(dg)?)),
+            Self::HIntro            => Some(SimplifyData::HIntro(HIntro.find(dg)?)),
+            Self::HMultiState       => Some(SimplifyData::HMultiState(HMultiState.find(dg)?)),
+            Self::HMultiStateAll    => Some(SimplifyData::HMultiStateAll(HMultiStateAll.find(dg)?)),
+            Self::HState            => Some(SimplifyData::HState(HState.find(dg)?)),
+            Self::HStateAll         => Some(SimplifyData::HStateAll(HStateAll.find(dg)?)),
+            Self::HStateCopy        => Some(SimplifyData::HStateCopy(HStateCopy.find(dg)?)),
+            Self::HStateCopyAll     => Some(SimplifyData::HStateCopyAll(HStateCopyAll.find(dg)?)),
+            Self::HStateMul         => Some(SimplifyData::HStateMul(HStateMul.find(dg)?)),
+            Self::HStateMulAll      => Some(SimplifyData::HStateMulAll(HStateMulAll.find(dg)?)),
+        }
     }
 }
 
 /// Output [`Simplify::find`].
 #[derive(Debug)]
 pub enum SimplifyData<'a> {
+    // ZX
+    /// [`BialgebraData`]
+    Bialgebra(BialgebraData<'a>),
+    /// [`ColorFlipData`]
+    ColorFlip(ColorFlipData<'a>),
+    /// [`ColorFlipAllData`]
+    ColorFlipAll(ColorFlipAllData<'a>),
+    /// [`FuseData`]
+    Fuse(FuseData<'a>),
+    /// [`FuseAllData`]
+    FuseAll(FuseAllData<'a>),
+    /// [`FuseMultiData`]
+    FuseMulti(FuseMultiData<'a>),
+    /// [`H2HopfData`]
+    H2Hopf(H2HopfData<'a>),
+    /// [`HEulerData`]
+    HEuler(HEulerData<'a>),
+    /// [`HEulerColorFlipData`]
+    HEulerColorFlip(HEulerColorFlipData<'a>),
+    /// [`HLoopData`]
+    HLoop(HLoopData<'a>),
+    /// [`HMoveData`]
+    HMove(HMoveData<'a>),
+    /// [`HSelfLoopData`]
+    HSelfLoop(HSelfLoopData<'a>),
+    /// [`HSelfLoopAllData`]
+    HSelfLoopAll(HSelfLoopAllData<'a>),
+    /// [`HopfData`]
+    Hopf(HopfData<'a>),
+    /// [`IStateData`]
+    IState(IStateData<'a>),
+    /// [`IStateAllData`]
+    IStateAll(IStateAllData<'a>),
+    /// [`IdentityData`]
     Identity(IdentityData<'a>),
+    /// [`IdentityAllData`]
+    IdentityAll(IdentityAllData<'a>),
+    /// [`PhaseNegData`]
+    PhaseNeg(PhaseNegData<'a>),
+    /// [`PhaseNegAllData`]
+    PhaseNegAll(PhaseNegAllData<'a>),
+    /// [`PiCommuteData`]
+    PiCommute(PiCommuteData<'a>),
+    /// [`ScalarPairData`]
+    ScalarPair(ScalarPairData<'a>),
+    /// [`ScalarPairAllData`]
+    ScalarPairAll(ScalarPairAllData<'a>),
+    /// [`SpiderSelfLoopData`]
+    SpiderSelfLoop(SpiderSelfLoopData<'a>),
+    /// [`SpiderSelfLoopAllData`]
+    SpiderSelfLoopAll(SpiderSelfLoopAllData<'a>),
+    /// [`StateCopyData`]
+    StateCopy(StateCopyData<'a>),
+    /// [`StateCopyAllData`]
+    StateCopyAll(StateCopyAllData<'a>),
+
+    // ZH
+    /// [`HAbsorbData`]
+    HAbsorb(HAbsorbData<'a>),
+    /// [`HAbsorbAllData`]
+    HAbsorbAll(HAbsorbAllData<'a>),
+    /// [`HAvgData`]
+    HAvg(HAvgData<'a>),
+    /// [`HBialgebraData`]
+    HBialgebra(HBialgebraData<'a>),
+    /// [`HExplodeData`]
+    HExplode(HExplodeData<'a>),
+    /// [`HExplodeAllData`]
+    HExplodeAll(HExplodeAllData<'a>),
+    /// [`HFuseData`]
+    HFuse(HFuseData<'a>),
+    /// [`HHopfData`]
+    HHopf(HHopfData<'a>),
+    /// [`HIntroData`]
+    HIntro(HIntroData<'a>),
+    /// [`HMultiStateData`]
+    HMultiState(HMultiStateData<'a>),
+    /// [`HMultiStateAllData`]
+    HMultiStateAll(HMultiStateAllData<'a>),
+    /// [`HStateData`]
+    HState(HStateData<'a>),
+    /// [`HStateAllData`]
+    HStateAll(HStateAllData<'a>),
+    /// [`HStateCopyData`]
+    HStateCopy(HStateCopyData<'a>),
+    /// [`HStateCopyAllData`]
+    HStateCopyAll(HStateCopyAllData<'a>),
+    /// [`HStateMulData`]
+    HStateMul(HStateMulData<'a>),
+    /// [`HStateMulAllData`]
+    HStateMulAll(HStateMulAllData<'a>),
 }
 
 impl<'a> private::RuleSeal for SimplifyData<'a> { }
 impl<'a> Rule for SimplifyData<'a> {
     fn simplify(self) {
-        todo!()
+        match self {
+            Self::Bialgebra(data)         => data.simplify(),
+            Self::ColorFlip(data)         => data.simplify(),
+            Self::ColorFlipAll(data)      => data.simplify(),
+            Self::Fuse(data)              => data.simplify(),
+            Self::FuseAll(data)           => data.simplify(),
+            Self::FuseMulti(data)         => data.simplify(),
+            Self::H2Hopf(data)            => data.simplify(),
+            Self::HEuler(data)            => data.simplify(),
+            Self::HEulerColorFlip(data)   => data.simplify(),
+            Self::HLoop(data)             => data.simplify(),
+            Self::HMove(data)             => data.simplify(),
+            Self::HSelfLoop(data)         => data.simplify(),
+            Self::HSelfLoopAll(data)      => data.simplify(),
+            Self::Hopf(data)              => data.simplify(),
+            Self::IState(data)            => data.simplify(),
+            Self::IStateAll(data)         => data.simplify(),
+            Self::Identity(data)          => data.simplify(),
+            Self::IdentityAll(data)       => data.simplify(),
+            Self::PhaseNeg(data)          => data.simplify(),
+            Self::PhaseNegAll(data)       => data.simplify(),
+            Self::PiCommute(data)         => data.simplify(),
+            Self::ScalarPair(data)        => data.simplify(),
+            Self::ScalarPairAll(data)     => data.simplify(),
+            Self::SpiderSelfLoop(data)    => data.simplify(),
+            Self::SpiderSelfLoopAll(data) => data.simplify(),
+            Self::StateCopy(data)         => data.simplify(),
+            Self::StateCopyAll(data)      => data.simplify(),
+            Self::HAbsorb(data)           => data.simplify(),
+            Self::HAbsorbAll(data)        => data.simplify(),
+            Self::HAvg(data)              => data.simplify(),
+            Self::HBialgebra(data)        => data.simplify(),
+            Self::HExplode(data)          => data.simplify(),
+            Self::HExplodeAll(data)       => data.simplify(),
+            Self::HFuse(data)             => data.simplify(),
+            Self::HHopf(data)             => data.simplify(),
+            Self::HIntro(data)            => data.simplify(),
+            Self::HMultiState(data)       => data.simplify(),
+            Self::HMultiStateAll(data)    => data.simplify(),
+            Self::HState(data)            => data.simplify(),
+            Self::HStateAll(data)         => data.simplify(),
+            Self::HStateCopy(data)        => data.simplify(),
+            Self::HStateCopyAll(data)     => data.simplify(),
+            Self::HStateMul(data)         => data.simplify(),
+            Self::HStateMulAll(data)      => data.simplify(),
+        }
     }
 }
 
 // ZX
 mod bialgebra;
 pub use bialgebra::*;
-mod bit_bialgebra;
-pub use bit_bialgebra::*;
 mod color_flip;
 pub use color_flip::*;
 mod color_flip_all;
@@ -132,6 +373,8 @@ mod fuse;
 pub use fuse::*;
 mod fuse_all;
 pub use fuse_all::*;
+mod fuse_multi;
+pub use fuse_multi::*;
 mod h2_hopf;
 pub use h2_hopf::*;
 mod h_euler;
@@ -148,26 +391,32 @@ mod h_self_loop_all;
 pub use h_self_loop_all::*;
 mod hopf;
 pub use hopf::*;
+mod i_state;
+pub use i_state::*;
+mod i_state_all;
+pub use i_state_all::*;
 mod identity;
 pub use identity::*;
 mod identity_all;
 pub use identity_all::*;
-mod istate;
-pub use istate::*;
 mod phase_neg;
 pub use phase_neg::*;
 mod phase_neg_all;
 pub use phase_neg_all::*;
-mod pi_bookend;
-pub use pi_bookend::*;
 mod pi_commute;
 pub use pi_commute::*;
+mod scalar_pair;
+pub use scalar_pair::*;
+mod scalar_pair_all;
+pub use scalar_pair_all::*;
 mod spider_self_loop;
 pub use spider_self_loop::*;
 mod spider_self_loop_all;
 pub use spider_self_loop_all::*;
 mod state_copy;
 pub use state_copy::*;
+mod state_copy_all;
+pub use state_copy_all::*;
 
 // ZH
 mod h_absorb;

@@ -631,19 +631,22 @@ impl CircuitDiagram {
         todo!()
     }
 
-    /// Create a copy of `self` with swapped inputs and outputs, the signs of
-    /// all spiders' phases flipped, and all H-boxes' arguments conjugated.
+    /// Create a copy of `self` with inputs and outputs swapped, the signs of
+    /// all spiders' phases flipped, and all H-boxes' arguments and the global
+    /// scalar conjugated.
     pub fn adjoint(&self) -> Self { self.clone().into_adjoint() }
 
     /// Swap inputs and outputs, flip the signs of all spiders' phases, and
-    /// conjugate all H-boxes' arguments, consuming `self`.
+    /// conjugate all H-boxes' arguments as well as the global scalar, consuming
+    /// `self`.
     pub fn into_adjoint(mut self) -> Self {
         self.adjoint_mut();
         self
     }
 
     /// Swap inputs and outputs, flip the signs of all spiders' phases, and
-    /// conjugate all H-boxes' arguments, modifying `self` in place.
+    /// conjugate all H-boxes' arguments as well as the global scalar, modifying
+    /// `self` in place.
     pub fn adjoint_mut(&mut self) -> &mut Self {
         let outs_new: Vec<OutWire> =
             self.ins.iter().copied()

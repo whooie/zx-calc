@@ -1,10 +1,58 @@
 use super::*;
 
-/// H-box of arbitrary arity and argument connected to an H-box of aribtrary
-/// arity and default argument via a single wire carrying a single H-box of
-/// default argument.
-#[derive(Copy, Clone, Debug)]
-pub struct HFuse(NodeId, NodeId, NodeId);
-//         HFuse(arg hbox, mid hbox, hbox)
+/// H-box version of [`Fuse`], combining two H-boxes connected by a single
+/// Hadamard wire into one.
+///
+/// ![h_fuse][h_fuse]
+#[embed_doc_image::embed_doc_image("h_fuse", "assets/rules/HFuse.svg")]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct HFuse;
 
+/// Output of [`HFuse::find`].
+#[derive(Debug)]
+pub struct HFuseData<'a> {
+    pub(crate) dg: &'a mut Diagram,
+    pub(crate) ha: NodeId, // h-box with argument
+    pub(crate) h1: NodeId, // middle h-box
+    pub(crate) h2: NodeId, // empty end h-box
+}
+
+impl RuleSeal for HFuse { }
+impl RuleFinder for HFuse {
+    type Output<'a> = HFuseData<'a>;
+
+    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+        let n0: PathNodeSpec = |_, _, _, n| {
+            n.is_h()
+        };
+        let n1: PathNodeSpec = |dg, _, id, n| {
+            n.is_h() && n.has_defarg() && dg.arity(id).unwrap() == 2
+        };
+        let n2: PathNodeSpec = |_, _, _, n| {
+            n.is_h() && n.has_defarg()
+        };
+        let p = dg.find_path(dg.nodes_inner(), &[n0, n1, n2])?;
+        let ha = p[0].0;
+        let h1 = p[1].0;
+        let h2 = p[2].0;
+        Some(HFuseData { dg, ha, h1, h2 })
+    }
+}
+
+impl<'a> RuleSeal for HFuseData<'a> { }
+impl<'a> Rule for HFuseData<'a> {
+    fn simplify(self) {
+        let Self { dg, ha, h1, h2 } = self;
+        dg.remove_node(h1).unwrap();
+        let (_, nnb) = dg.remove_node_nb(h2).unwrap();
+        nnb.into_iter()
+            .for_each(|nb| {
+                if nb == h2 {
+                    dg.add_wire(ha, ha).unwrap();
+                } else {
+                    dg.add_wire(ha, nb).unwrap();
+                }
+            });
+    }
+}
 

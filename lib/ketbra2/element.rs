@@ -1,7 +1,6 @@
 use std::fmt;
 use itertools::Itertools;
 use num_complex::Complex64 as C64;
-use rustc_hash::FxHashSet;
 use crate::{
     ketbra2::{ Basis, KBError, KBResult, KetBra, State, StateOrd },
     phase::Phase,
@@ -10,7 +9,6 @@ use KBError::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ElementData {
-    Null, // for private use only
     Z { ket: Vec<usize>, bra: Vec<usize>, ph: Phase },
     X { ket: Vec<usize>, bra: Vec<usize>, ph: Phase },
     H { ket: Vec<usize>, bra: Vec<usize>, arg: C64 },
@@ -41,7 +39,6 @@ impl ElementData {
 
     pub(crate) fn is_scalar(&self) -> bool {
         match self {
-            Self::Null => unreachable!(),
             Self::Z { ket, bra, ph: _ } => ket.is_empty() && bra.is_empty(),
             Self::X { ket, bra, ph: _ } => ket.is_empty() && bra.is_empty(),
             Self::H { ket, bra, arg: _ } => ket.is_empty() && bra.is_empty(),
@@ -54,7 +51,6 @@ impl ElementData {
 
     pub(crate) fn as_scalar(&self) -> Option<C64> {
         match self {
-            Self::Null => unreachable!(),
             Self::Z { ket, bra, ph } if ket.is_empty() && bra.is_empty() => {
                 Some(ph.cis() + 1.0)
             },
@@ -162,7 +158,6 @@ impl ElementData {
 
     pub(crate) fn contains_ket(&self, k: usize) -> bool {
         match self {
-            Self::Null => unreachable!(),
             Self::Z { ket, bra: _, ph: _ } => ket.contains(&k),
             Self::X { ket, bra: _, ph: _ } => ket.contains(&k),
             Self::H { ket, bra: _, arg: _ } => ket.contains(&k),
@@ -177,7 +172,6 @@ impl ElementData {
 
     pub(crate) fn contains_bra(&self, k: usize) -> bool {
         match self {
-            Self::Null => unreachable!(),
             Self::Z { ket: _, bra, ph: _ } => bra.contains(&k),
             Self::X { ket: _, bra, ph: _ } => bra.contains(&k),
             Self::H { ket: _, bra, arg: _ } => bra.contains(&k),
@@ -190,12 +184,55 @@ impl ElementData {
         }
     }
 
+    pub(crate) fn ins(&self) -> Vec<usize> {
+        match self {
+            Self::Z { ket: _, bra, ph: _ } => bra.clone(),
+            Self::X { ket: _, bra, ph: _ } => bra.clone(),
+            Self::H { ket: _, bra, arg: _ } => bra.clone(),
+            Self::Swap { a, b } => vec![*a, *b],
+            Self::Cup { .. } => Vec::new(),
+            Self::Cap { a, b } => vec![*a, *b],
+            Self::Terms { terms } => {
+                let mut acc: Vec<usize> = Vec::new();
+                terms.iter()
+                    .for_each(|kb| {
+                        kb.bra_iter().for_each(|(k, _)| {
+                            if !acc.contains(&k) { acc.push(k); }
+                        });
+                    });
+                acc
+            },
+        }
+    }
+
+    pub(crate) fn outs(&self) -> Vec<usize> {
+        match self {
+            Self::Z { ket, bra: _, ph: _ } => ket.clone(),
+            Self::X { ket, bra: _, ph: _ } => ket.clone(),
+            Self::H { ket, bra: _, arg: _ } => ket.clone(),
+            Self::Swap { a, b } => vec![*a, *b],
+            Self::Cup { a, b } => vec![*a, *b],
+            Self::Cap { .. } => Vec::new(),
+            Self::Terms { terms } => {
+                let mut acc: Vec<usize> = Vec::new();
+                terms.iter()
+                    .for_each(|kb| {
+                        kb.ket_iter().for_each(|(k, _)| {
+                            if !acc.contains(&k) { acc.push(k); }
+                        });
+                    });
+                acc
+            },
+        }
+    }
+
+    #[allow(clippy::uninit_assumed_init, invalid_value)]
     pub(crate) fn make_terms(&mut self) {
-        let mut temp = Self::Null;
-        std::mem::swap(&mut temp, self);
+        let temp =
+            unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+        let temp = std::mem::replace(self, temp);
         let terms: Vec<KetBra> =
             match temp {
-                Self::Null => unreachable!(),
                 Self::Z { ket, bra, ph } => vec![
                     KetBra::new(
                         C64::from(1.0),
@@ -288,8 +325,9 @@ impl ElementData {
                 ],
                 Self::Terms { terms } => terms,
             };
-        let mut new = Self::Terms { terms };
-        std::mem::swap(&mut new, self);
+        let new = Self::Terms { terms };
+        let temp = std::mem::replace(self, new);
+        std::mem::forget(temp);
     }
 
     pub(crate) fn as_terms(&self) -> Vec<KetBra> {
@@ -338,15 +376,26 @@ impl ElementData {
     pub(crate) fn iso(&self, other: &Self) -> bool {
         const EPSILON: f64 = 1e-12;
         match (&self, &other) {
-            (Self::Null, _) | (_, Self::Null) => unreachable!(),
             (
                 Self::Z { ket: ket_l, bra: bra_l, ph: ph_l },
                 Self::Z { ket: ket_r, bra: bra_r, ph: ph_r },
-            ) => ket_l == ket_r && bra_l == bra_r && ph_l == ph_r,
+            ) => {
+                ph_l == ph_r
+                    && ket_l.len() == ket_r.len()
+                    && ket_l.iter().all(|id| ket_r.contains(id))
+                    && bra_l.len() == bra_r.len()
+                    && bra_l.iter().all(|id| bra_r.contains(id))
+            },
             (
                 Self::X { ket: ket_l, bra: bra_l, ph: ph_l },
                 Self::X { ket: ket_r, bra: bra_r, ph: ph_r },
-            ) => ket_l == ket_r && bra_l == bra_r && ph_l == ph_r,
+            ) => {
+                ph_l == ph_r
+                    && ket_l.len() == ket_r.len()
+                    && ket_l.iter().all(|id| ket_r.contains(id))
+                    && bra_l.len() == bra_r.len()
+                    && bra_l.iter().all(|id| bra_r.contains(id))
+            },
             (
                 Self::Z { ket: ket_l, bra: bra_l, ph: ph_l },
                 Self::X { ket: ket_r, bra: bra_r, ph: ph_r },
@@ -566,23 +615,29 @@ impl ElementData {
     }
 
     pub(crate) fn iso_mat(&self, other: &Self) -> bool {
+        const EPSILON: f64 = 1e-12;
         if self.iso(other) { return true; }
+        if let (Some(l), Some(r)) = (self.as_scalar(), other.as_scalar()) {
+            return (l.norm() < EPSILON && r.norm() < EPSILON)
+                || (l.norm() >= EPSILON && r.norm() >= EPSILON)
+        }
+
         todo!()
     }
 
     pub(crate) fn dot(&self, rhs: &Self) -> KBResult<Self> {
         const EPSILON: f64 = 1e-12;
         match (&self, &rhs) {
-            (Self::Null, _) | (_, Self::Null) => unreachable!(),
             (
                 Self::Z { ket: ket_l, bra: bra_l, ph: ph_l },
                 Self::Z { ket: ket_r, bra: bra_r, ph: ph_r },
             ) => {
-                let mut common: FxHashSet<usize> = FxHashSet::default();
+                let mut common: Vec<usize> =
+                    Vec::with_capacity(bra_l.len().max(ket_r.len()));
                 // check for duplicate kets in result
                 for id in ket_r.iter() {
                     if bra_l.contains(id) {
-                        common.insert(*id);
+                        common.push(*id);
                     } else if ket_l.contains(id) {
                         return Err(DotDuplicateKetKey(*id));
                     }
@@ -622,11 +677,12 @@ impl ElementData {
                 Self::X { ket: ket_l, bra: bra_l, ph: ph_l },
                 Self::X { ket: ket_r, bra: bra_r, ph: ph_r },
             ) => {
-                let mut common: FxHashSet<usize> = FxHashSet::default();
+                let mut common: Vec<usize> =
+                    Vec::with_capacity(bra_l.len().max(ket_r.len()));
                 // check for duplicate kets in result
                 for id in ket_r.iter() {
                     if bra_l.contains(id) {
-                        common.insert(*id);
+                        common.push(*id);
                     } else if ket_l.contains(id) {
                         return Err(DotDuplicateKetKey(*id));
                     }
@@ -661,6 +717,62 @@ impl ElementData {
                     let ph = *ph_l + *ph_r;
                     Ok(Self::X { ket, bra, ph })
                 }
+            },
+            (
+                Self::H { ket: ket_l, bra: bra_l, arg: arg_l },
+                Self::H { ket: ket_r, bra: bra_r, arg: arg_r },
+            ) if ket_l.len() == 1 && bra_l.len() == 1
+                && (*arg_l + 1.0).norm() < EPSILON
+                && ket_r.len() == 1 && bra_r.len() == 1
+                && (*arg_r + 1.0).norm() < EPSILON
+                && bra_l == ket_r
+            => {
+                let new = Self::Z {
+                    ket: ket_l.clone(),
+                    bra: bra_r.clone(),
+                    ph: Phase::zero(),
+                };
+                Ok(new)
+            },
+            (
+                Self::H { ket: ket_l, bra: bra_l, arg: arg_l },
+                Self::Z { ket: ket_r, bra: bra_r, ph: _ },
+            ) if ket_r.len() == 1 && bra_r.is_empty()
+                && ket_l.len() == 1 && bra_l.len() == 1
+                && (*arg_l + 1.0).norm() < EPSILON
+                && bra_l.contains(&ket_r[0])
+            => {
+                Ok(rhs.hadamard())
+            },
+            (
+                Self::Z { ket: ket_l, bra: bra_l, ph: _ },
+                Self::H { ket: ket_r, bra: bra_r, arg: arg_r },
+            ) if ket_l.is_empty() && bra_l.len() == 1
+                && ket_r.len() == 1 && bra_r.len() == 1
+                && (*arg_r + 1.0).norm() < EPSILON
+                && ket_r.contains(&bra_l[0])
+            => {
+                Ok(self.hadamard())
+            },
+            (
+                Self::H { ket: ket_l, bra: bra_l, arg: arg_l },
+                Self::X { ket: ket_r, bra: bra_r, ph: _ },
+            ) if ket_r.len() == 1 && bra_r.is_empty()
+                && ket_l.len() == 1 && bra_l.len() == 1
+                && (*arg_l + 1.0).norm() < EPSILON
+                && bra_l.contains(&ket_r[0])
+            => {
+                Ok(rhs.hadamard())
+            },
+            (
+                Self::X { ket: ket_l, bra: bra_l, ph: _ },
+                Self::H { ket: ket_r, bra: bra_r, arg: arg_r },
+            ) if ket_l.is_empty() && bra_l.len() == 1
+                && ket_r.len() == 1 && bra_r.len() == 1
+                && (*arg_r + 1.0).norm() < EPSILON
+                && ket_r.contains(&bra_l[0])
+            => {
+                Ok(self.hadamard())
             },
             (
                 l,
@@ -725,16 +837,16 @@ impl ElementData {
     pub(crate) fn into_dot(self, rhs: Self) -> KBResult<Self> {
         const EPSILON: f64 = 1e-12;
         match (self, rhs) {
-            (Self::Null, _) | (_, Self::Null) => unreachable!(),
             (
                 Self::Z { ket: mut ket_l, bra: bra_l, ph: mut ph_l },
                 Self::Z { ket: ket_r, bra: mut bra_r, ph: ph_r },
             ) => {
-                let mut common: FxHashSet<usize> = FxHashSet::default();
+                let mut common: Vec<usize> =
+                    Vec::with_capacity(bra_l.len().max(ket_r.len()));
                 // check for duplicate kets in result
                 for id in ket_r.iter() {
                     if bra_l.contains(id) {
-                        common.insert(*id);
+                        common.push(*id);
                     } else if ket_l.contains(id) {
                         return Err(DotDuplicateKetKey(*id));
                     }
@@ -775,11 +887,12 @@ impl ElementData {
                 Self::X { ket: mut ket_l, bra: bra_l, ph: mut ph_l },
                 Self::X { ket: ket_r, bra: mut bra_r, ph: ph_r },
             ) => {
-                let mut common: FxHashSet<usize> = FxHashSet::default();
+                let mut common: Vec<usize> =
+                    Vec::with_capacity(bra_l.len().max(ket_r.len()));
                 // check for duplicate kets in result
                 for id in ket_r.iter() {
                     if bra_l.contains(id) {
-                        common.insert(*id);
+                        common.push(*id);
                     } else if ket_l.contains(id) {
                         return Err(DotDuplicateKetKey(*id));
                     }
@@ -815,6 +928,58 @@ impl ElementData {
                     ph_l += ph_r;
                     Ok(Self::X { ket: ket_l, bra: bra_r, ph: ph_l })
                 }
+            },
+            (
+                Self::H { ket: ket_l, bra: bra_l, arg: arg_l },
+                Self::H { ket: ket_r, bra: bra_r, arg: arg_r },
+            ) if ket_l.len() == 1 && bra_l.len() == 1
+                && (arg_l + 1.0).norm() < EPSILON
+                && ket_r.len() == 1 && bra_r.len() == 1
+                && (arg_r + 1.0).norm() < EPSILON
+                && bra_l == ket_r
+            => {
+                let new = Self::Z { ket: ket_l, bra: bra_r, ph: Phase::zero() };
+                Ok(new)
+            },
+            (
+                Self::H { ket: ket_l, bra: bra_l, arg: arg_l },
+                Self::Z { ket: ket_r, bra: bra_r, ph: ph_r },
+            ) if ket_r.len() == 1 && bra_r.is_empty()
+                && ket_l.len() == 1 && bra_l.len() == 1
+                && (arg_l + 1.0).norm() < EPSILON
+                && bra_l.contains(&ket_r[0])
+            => {
+                Ok(Self::Z { ket: ket_r, bra: bra_r, ph: ph_r }.into_hadamard())
+            },
+            (
+                Self::Z { ket: ket_l, bra: bra_l, ph: ph_l },
+                Self::H { ket: ket_r, bra: bra_r, arg: arg_r },
+            ) if ket_l.is_empty() && bra_l.len() == 1
+                && ket_r.len() == 1 && bra_r.len() == 1
+                && (arg_r + 1.0).norm() < EPSILON
+                && ket_r.contains(&bra_l[0])
+            => {
+                Ok(Self::Z { ket: ket_l, bra: bra_l, ph: ph_l }.into_hadamard())
+            },
+            (
+                Self::H { ket: ket_l, bra: bra_l, arg: arg_l },
+                Self::X { ket: ket_r, bra: bra_r, ph: ph_r },
+            ) if ket_r.len() == 1 && bra_r.is_empty()
+                && ket_l.len() == 1 && bra_l.len() == 1
+                && (arg_l + 1.0).norm() < EPSILON
+                && bra_l.contains(&ket_r[0])
+            => {
+                Ok(Self::X { ket: ket_r, bra: bra_r, ph: ph_r }.into_hadamard())
+            },
+            (
+                Self::X { ket: ket_l, bra: bra_l, ph: ph_l },
+                Self::H { ket: ket_r, bra: bra_r, arg: arg_r },
+            ) if ket_l.is_empty() && bra_l.len() == 1
+                && ket_r.len() == 1 && bra_r.len() == 1
+                && (arg_r + 1.0).norm() < EPSILON
+                && ket_r.contains(&bra_l[0])
+            => {
+                Ok(Self::X { ket: ket_l, bra: bra_l, ph: ph_l }.into_hadamard())
             },
             (
                 l,
@@ -878,6 +1043,7 @@ impl ElementData {
 
     #[allow(clippy::uninit_assumed_init, invalid_value)]
     pub(crate) fn hadamard_mut(&mut self) {
+        const EPSILON: f64 = 1e-12;
         match self {
             Self::Z { .. } => {
                 let temp =
@@ -897,7 +1063,10 @@ impl ElementData {
                 let temp = std::mem::replace(self, new);
                 std::mem::forget(temp);
             },
-            Self::H { .. } => {
+            Self::H { ket, bra, arg } => {
+                if ket.len() == 1 && bra.len() == 1
+                    && (*arg + 1.0).norm() < EPSILON
+                { return; }
                 let temp =
                     unsafe { std::mem::MaybeUninit::uninit().assume_init() };
                 let mut data = std::mem::replace(self, temp);
@@ -928,7 +1097,6 @@ impl ElementData {
 
     pub(crate) fn adjoint_mut(&mut self) {
         match self {
-            Self::Null => unreachable!(),
             Self::Z { ket, bra, ph } => {
                 std::mem::swap(ket, bra);
                 *ph = -*ph;
@@ -1121,6 +1289,12 @@ impl Element {
 
     /// Return `true` if `self` contains a bra on wire `k`.
     pub fn contains_bra(&self, k: usize) -> bool { self.data.contains_bra(k) }
+
+    /// Return a list of all input wire indices.
+    pub fn ins(&self) -> Vec<usize> { self.data.ins() }
+
+    /// Return a list of all output wire indices.
+    pub fn outs(&self) -> Vec<usize> { self.data.outs() }
 
     pub(crate) fn make_terms(&mut self) { self.data.make_terms(); }
 
@@ -1449,30 +1623,41 @@ mod tests {
         let z2 = Element::z([1, 2], [3, 4], Some(Phase::pi()));
         let z3 = Element::z([1, 4], [3, 4], Some(Phase::pi()));
         assert!(z0.iso(&z1));
+        assert!(z1.iso(&z0));
         assert!(!z0.iso(&z2));
+        assert!(!z2.iso(&z0));
         assert!(!z0.iso(&z3));
+        assert!(!z3.iso(&z0));
 
         let x0 = Element::x([1, 2], [3, 4], Some(Phase::pi2()));
         let x1 = Element::x([1, 2], [3, 4], Some(Phase::pi2()));
         let x2 = Element::x([1, 2], [3, 4], Some(Phase::pi()));
         let x3 = Element::x([1, 4], [3, 4], Some(Phase::pi()));
         assert!(x0.iso(&x1));
+        assert!(x1.iso(&x0));
         assert!(!x0.iso(&x2));
+        assert!(!x2.iso(&x0));
         assert!(!x0.iso(&x3));
+        assert!(!x3.iso(&x0));
 
         let z_id = Element::z([0], [0], None);
         let x_id = Element::x([0], [0], None);
         let x_id_not = Element::x([1], [0], None);
         assert!(z_id.iso(&x_id));
+        assert!(x_id.iso(&z_id));
         assert!(!z_id.iso(&x_id_not));
+        assert!(!x_id_not.iso(&z_id));
 
         let z_ystate_p = Element::z([], [0], Some( Phase::pi2()));
         let x_ystate_p = Element::x([], [0], Some(-Phase::pi2()));
         let z_yeffect_m = Element::z([0], [], Some(-Phase::pi2()));
         let x_yeffect_m = Element::x([0], [], Some( Phase::pi2()));
         assert!(z_ystate_p.iso(&x_ystate_p));
+        assert!(x_ystate_p.iso(&z_ystate_p));
         assert!(z_yeffect_m.iso(&x_yeffect_m));
+        assert!(x_yeffect_m.iso(&z_yeffect_m));
         assert!(!z_ystate_p.iso(&x_yeffect_m));
+        assert!(!x_yeffect_m.iso(&z_ystate_p));
 
         let z_scalar = Element::z([], [], Some(Phase::pi4()));
         let x_scalar = Element::x([], [], Some(Phase::pi4()));
@@ -1480,37 +1665,51 @@ mod tests {
         let z_diffscalar = Element::z([], [], Some(Phase::pi2()));
         let h_scalar = Element::h([], [], Some(Phase::pi4().cis()));
         assert!(z_scalar.iso(&x_scalar));
+        assert!(x_scalar.iso(&z_scalar));
         assert!(!z_scalar.iso(&x_nonscalar));
+        assert!(!x_nonscalar.iso(&z_scalar));
         assert!(!z_scalar.iso(&z_diffscalar));
+        assert!(!z_diffscalar.iso(&z_scalar));
         assert!(z_scalar.iso(&h_scalar));
+        assert!(h_scalar.iso(&z_scalar));
         assert!(x_scalar.iso(&h_scalar));
+        assert!(h_scalar.iso(&x_scalar));
 
         let h_state = Element::h([], [0], None);
         let h_effect = Element::h([0], [], Some(Phase::zero().cis()));
         let z_state = Element::z([], [0], Some(Phase::pi()));
         let z_effect = Element::z([0], [], Some(Phase::zero()));
         assert!(h_state.iso(&z_state));
+        assert!(z_state.iso(&h_state));
         assert!(h_effect.iso(&z_effect));
+        assert!(z_effect.iso(&h_effect));
 
         let swap1 = Element::swap(1, 2);
         let swap2 = Element::swap(2, 1);
         assert!(swap1.iso(&swap2));
+        assert!(swap2.iso(&swap1));
 
         let cup1 = Element::cup(1, 2);
         let cup2 = Element::cup(2, 1);
         let z_cup = Element::z([], [1, 2], None);
         let x_cup = Element::x([], [1, 2], None);
         assert!(cup1.iso(&cup2));
+        assert!(cup2.iso(&cup1));
         assert!(z_cup.iso(&cup1));
+        assert!(cup1.iso(&z_cup));
         assert!(cup2.iso(&x_cup));
+        assert!(x_cup.iso(&cup2));
 
         let cap1 = Element::cap(1, 2);
         let cap2 = Element::cap(2, 1);
         let z_cap = Element::z([1, 2], [], None);
         let x_cap = Element::x([2, 1], [], None);
         assert!(cap1.iso(&cap2));
+        assert!(cap2.iso(&cap1));
         assert!(cap2.iso(&z_cap));
+        assert!(z_cap.iso(&cap2));
         assert!(x_cap.iso(&cap1));
+        assert!(cap1.iso(&x_cap));
 
         let terms1 = Element::from_terms([
             KetBra::new(C64::i(), [(0, State::Zero), (1, State::One)], []),
@@ -1521,6 +1720,7 @@ mod tests {
             KetBra::new(C64::i(), [(0, State::Zero), (1, State::One)], []),
         ]);
         assert!(terms1.iso(&terms2));
+        assert!(terms2.iso(&terms1));
     }
 
     // TODO: iso_mat
@@ -1550,22 +1750,143 @@ mod tests {
         let dot = dot.unwrap();
         assert!(!dot.is_atomic());
 
-        todo!()
+        let h0 = Element::h([0], [0], None);
+        let h1 = Element::h([0], [0], None);
+        let h2 = Element::h([1], [0], None);
+        let h3 = Element::h([0], [1], None);
+        let h4 = Element::h([0], [0], Some(Phase::zero().cis()));
+        let h5 = Element::h([0, 1], [0], None);
+        let dot01 = h0.dot(&h1);
+        assert!(dot01.is_ok());
+        assert!(dot01.unwrap().is_z());
+        let dot02 = h0.dot(&h2);
+        assert!(dot02.is_ok());
+        assert!(dot02.unwrap().is_z());
+        let dot03 = h0.dot(&h3);
+        assert!(dot03.is_err());
+        let dot04 = h0.dot(&h4);
+        assert!(dot04.is_ok());
+        assert!(!dot04.unwrap().is_atomic());
+        let dot05 = h0.dot(&h5);
+        assert!(dot05.is_ok());
+        assert!(!dot05.unwrap().is_atomic());
+
+        let h = Element::h([0], [0], None);
+        let z0 = Element::z([], [0], Some(Phase::pi()));
+        let x0 = Element::x([], [0], Some(Phase::pi()));
+        let dot0 = h.dot(&z0);
+        assert!(dot0.is_ok());
+        let dot0 = dot0.unwrap();
+        assert!(dot0.iso(&x0));
+        let z1 = Element::z([0], [], Some(Phase::pi2()));
+        let x1 = Element::x([0], [], Some(Phase::pi2()));
+        let dot1 = x1.dot(&h);
+        assert!(dot1.is_ok());
+        let dot1 = dot1.unwrap();
+        assert!(dot1.iso(&z1));
     }
 
     #[test]
     fn hadamard() {
-        todo!()
+        let z = Element::z([0], [1, 2], Some(Phase::pi2() + Phase::pi()));
+        let hzh = z.hadamard();
+        let expected = Element::x([0], [1, 2], Some(Phase::pi2() + Phase::pi()));
+        assert!(hzh.iso(&expected));
+
+        let x = Element::x([0], [1, 2], Some(Phase::pi2() + Phase::pi()));
+        let hxh = x.hadamard();
+        let expected = Element::z([0], [1, 2], Some(Phase::pi2() + Phase::pi()));
+        assert!(hxh.iso(&expected));
+
+        let h = Element::h([0], [1], None);
+        assert!(h.hadamard().iso(&h));
+        let h = Element::h([0], [1], Some(C64::i()));
+        assert!(!h.hadamard().iso(&h));
+
+        let terms = Element::from_terms([
+            KetBra::new(C64::i(), [(0, State::Zero)], [(1, State::Minus)]),
+            KetBra::new(C64::i(), [(0, State::One), (2, State::Plus)], []),
+        ]);
+        let htermsh = terms.hadamard();
+        let expected = Element::from_terms([
+            KetBra::new(C64::i(), [(0, State::Plus)], [(1, State::One)]),
+            KetBra::new(C64::i(), [(0, State::Minus), (2, State::Zero)], []),
+        ]);
+        assert!(htermsh.iso(&expected));
     }
 
     #[test]
     fn adjoint() {
-        todo!()
+        let z = Element::z([0, 3, 2], [1, 5, 7], Some(Phase::pi2()));
+        let z_dag = z.adjoint();
+        let expected = Element::z([1, 7, 5], [0, 2, 3], Some(-Phase::pi2()));
+        assert!(z_dag.iso(&expected));
+
+        let x = Element::x([0, 3, 2], [1, 5, 7], Some(Phase::pi2()));
+        let x_dag = x.adjoint();
+        let expected = Element::x([1, 7, 5], [0, 2, 3], Some(-Phase::pi2()));
+        assert!(x_dag.iso(&expected));
+
+        let h = Element::h([0, 1], [0, 1], None);
+        assert!(h.adjoint().iso(&h));
+        let hi = Element::h([2, 1], [0], Some(C64::i()));
+        let expected = Element::h([0], [2, 1], Some(-C64::i()));
+        assert!(hi.adjoint().iso(&expected));
+
+        let swap = Element::swap(0, 1);
+        assert!(swap.adjoint().iso(&swap));
+
+        let cup = Element::cup(0, 1);
+        let cap = Element::cap(1, 0);
+        assert!(cup.adjoint().iso(&cap));
+        assert!(cap.adjoint().iso(&cup));
+
+        let terms = Element::from_terms([
+            KetBra::new(C64::i(), [(0, State::Zero)], [(1, State::Minus)]),
+            KetBra::new(C64::i(), [(0, State::One), (2, State::Plus)], []),
+        ]);
+        let terms_dag = terms.adjoint();
+        let expected = Element::from_terms([
+            KetBra::new(-C64::i(), [(1, State::Minus)], [(0, State::Zero)]),
+            KetBra::new(-C64::i(), [], [(0, State::One), (2, State::Plus)]),
+        ]);
+        assert!(terms_dag.iso(&expected));
     }
 
     #[test]
     fn into_basis() {
-        todo!()
+        let z_scalar = Element::z([], [], Some(Phase::pi2()));
+        let z_scalar_x = z_scalar.clone().into_basis(Basis::X);
+        assert!(z_scalar.iso(&z_scalar_x));
+
+        let x_scalar = Element::x([], [], Some(Phase::pi4()));
+        let x_scalar_z = x_scalar.clone().into_basis(Basis::Z);
+        assert!(x_scalar.iso(&x_scalar_z));
+
+        let h = Element::h([0], [0], None);
+        let h_z = h.clone().into_basis(Basis::Z);
+        let h_x = h.clone().into_basis(Basis::X);
+        assert!(h.iso(&h_z));
+        assert!(h.iso(&h_x));
+
+        let swap = Element::swap(0, 1);
+        let swap_z = swap.clone().into_basis(Basis::Z);
+        let swap_x = swap.clone().into_basis(Basis::X);
+        assert!(swap.iso(&swap_z));
+        assert!(swap.iso(&swap_x));
+
+        let cup = Element::cup(0, 1);
+        let cup_z = cup.clone().into_basis(Basis::Z);
+        let cup_x = cup.clone().into_basis(Basis::X);
+        assert!(cup.iso(&cup_z));
+        assert!(cup.iso(&cup_x));
+
+        let cap = Element::cap(0, 1);
+        let cap_z = cap.clone().into_basis(Basis::Z);
+        let cap_x = cap.clone().into_basis(Basis::X);
+        assert!(cap.iso(&cap_z));
+        assert!(cap.iso(&cap_x));
+
     }
 }
 

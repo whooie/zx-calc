@@ -78,6 +78,12 @@ impl Node {
         }
     }
 
+    pub(crate) fn map_arg<F>(&mut self, f: F)
+    where F: FnOnce(C64) -> C64
+    {
+        if let Self::H(a) = self { *a = f(*a); }
+    }
+
     pub(crate) fn adjoint_mut(&mut self) {
         match self {
             Self::Z(ph) => { *self = Node::Z(-*ph); },
@@ -219,6 +225,23 @@ impl Node {
         match (self, other) {
             (Self::Z(ph1), Self::X(ph2)) | (Self::X(ph1), Self::Z(ph2))
                 => pred(*ph1, *ph2),
+            _ => false,
+        }
+    }
+
+    /// If `self` is `H`, return the associated argument.
+    pub fn arg(&self) -> Option<C64> {
+        match self {
+            Self::H(a) => Some(*a),
+            _ => None,
+        }
+    }
+
+    /// Return `true` if `self` is `H` with the given argument.
+    pub fn has_arg(&self, arg: C64) -> bool {
+        const EPSILON: f64 = 1e-12;
+        match self {
+            Self::H(a) => (*a - arg).norm() < EPSILON,
             _ => false,
         }
     }

@@ -1,7 +1,10 @@
 use super::*;
 
-/// Two spiders of arbitrary arity and phase with opposite colors sandwiching an
-/// H-box with default argument on a single wire.
+/// When two spiders of opposite color are connected by a Hadamard wire, commute
+/// the H-box through the spider of lesser arity and fuse the spiders.
+///
+/// ![h_move][h_move]
+#[embed_doc_image::embed_doc_image("h_move", "assets/rules/HMove.svg")]
 #[derive(Copy, Clone, Debug)]
 pub struct HMove;
 

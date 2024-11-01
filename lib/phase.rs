@@ -117,7 +117,7 @@ impl Phase {
 
     /// Return `true` if `self` is an integer multiple of 2π/`n`.
     pub fn is_mult(self, n: i64) -> bool {
-        self.0 % R64::from(n) == R64::zero()
+        self % Self::frac(n) == Self::zero()
     }
 
     /// Convert to a complex number with modulus 1 and argument equal to `self`.

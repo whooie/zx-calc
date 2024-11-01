@@ -27,6 +27,7 @@ rustc-hash = "1.1.0"
 tabbycat = "0.1.3"
 thiserror = "1.0.57"
 num-traits = "0.2.19"
+embed-doc-image = "0.1.4"
 
 [lib]
 path = "lib/lib.rs"

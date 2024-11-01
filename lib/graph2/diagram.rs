@@ -1,6 +1,6 @@
 use std::{ collections::VecDeque, fs, io::Write, path::Path };
 use num_complex::Complex64 as C64;
-use rustc_hash::{ FxHashMap, FxHashSet };
+use rustc_hash::FxHashMap;
 use crate::{
     graph2::{
         GraphResult,
@@ -37,6 +37,7 @@ pub struct Diagram {
     pub(crate) inputs: Vec<NodeId>,
     pub(crate) outputs: Vec<NodeId>,
     pub(crate) free: Vec<NodeId>,
+    pub(crate) scalar: C64,
 }
 
 impl Default for Diagram {
@@ -54,6 +55,7 @@ impl Diagram {
             inputs: Vec::new(),
             outputs: Vec::new(),
             free: Vec::new(),
+            scalar: 1.0.into(),
         }
     }
 
@@ -71,6 +73,22 @@ impl Diagram {
         nodes.into_iter()
             .for_each(|def| { dg.add_node(def); });
         dg
+    }
+
+    /// Return the global scalar on the diagram.
+    pub fn scalar(&self) -> C64 { self.scalar }
+
+    /// Apply a mapping function to the global scalar.
+    pub fn map_scalar<F>(&mut self, map: F)
+    where F: FnOnce(C64) -> C64
+    {
+        self.scalar = map(self.scalar);
+    }
+
+    /// Return `true` if the gobal scalar is zero.
+    pub fn scalar_is_zero(&self) -> bool {
+        const EPSILON: f64 = 1e-12;
+        self.scalar.norm() < EPSILON
     }
 
     /// Return the number of nodes.
@@ -257,11 +275,49 @@ impl Diagram {
             let k = self.find_input_index(id).unwrap();
             self.inputs.remove(k);
         }
-        if node.is_output() || self.inputs.contains(&id) {
+        if node.is_output() || self.outputs.contains(&id) {
             let k = self.find_output_index(id).unwrap();
             self.outputs.remove(k);
         }
         Ok(node)
+    }
+
+    /// Like [`remove_node`][Self::remove_node], but returning a list of the
+    /// node's neighbors alongside its data.
+    pub fn remove_node_nb(&mut self, id: NodeId)
+        -> GraphResult<(Node, Vec<NodeId>)>
+    {
+        let node =
+            self.nodes.get_mut(id)
+            .ok_or(RemoveNodeMissingNode(id))?
+            .take()
+            .ok_or(RemoveNodeMissingNode(id))?;
+        self.node_count -= 1;
+        self.free.push(id);
+        let nnb_of = self.wires[id].take().unwrap();
+        let self_loops = nnb_of.iter().filter(|nb| **nb == id).count() / 2;
+        self.wire_count -= nnb_of.len() - self_loops;
+        for &nb_of in nnb_of.iter() {
+            while let Some(k) =
+                self.wires[nb_of].as_ref()
+                    .and_then(|nnb| {
+                        nnb.iter().enumerate()
+                            .find_map(|(k, nb)| (*nb == id).then_some(k))
+                    })
+            {
+                self.wires[nb_of].as_mut().unwrap()
+                    .swap_remove(k);
+            }
+        }
+        if node.is_input() || self.inputs.contains(&id) {
+            let k = self.find_input_index(id).unwrap();
+            self.inputs.remove(k);
+        }
+        if node.is_output() || self.outputs.contains(&id) {
+            let k = self.find_output_index(id).unwrap();
+            self.outputs.remove(k);
+        }
+        Ok((node, nnb_of))
     }
 
     // remove the node associated with a particular ID and return its data and
@@ -421,7 +477,7 @@ impl Diagram {
             .filter_map(|(k, nid)| (*nid == b).then_some(k))
             .take(nwires.unwrap_or(len_nnb_a))
             .for_each(|k| { to_remove.push(k); });
-        let removed_a = to_remove.len();
+        let mut removed_a = to_remove.len();
         to_remove.drain(..).rev()
             .for_each(|k| { nnb_a.swap_remove(k); });
 
@@ -435,7 +491,8 @@ impl Diagram {
         to_remove.drain(..).rev()
             .for_each(|k| { nnb_b.swap_remove(k); });
 
-        debug_assert_eq!(removed_a, removed_b);
+        debug_assert!(removed_a == removed_b || a == b);
+        if a == b { removed_a /= 2; }
         self.wire_count -= removed_a;
         Ok(removed_a)
     }
@@ -603,7 +660,7 @@ impl Diagram {
         Wires {
             nb_group: None,
             len: self.wire_count,
-            seen: FxHashSet::default(),
+            seen: Vec::with_capacity(self.wire_count),
             iter: self.wires.iter().enumerate() }
     }
 
@@ -639,6 +696,56 @@ impl Diagram {
         WiresDataInner { iter: self.wires_data() }
     }
 
+    /// Return the ID of an arbitrary neighbor of the given node ID, if it
+    /// exists.
+    pub fn get_neighbor_of(&self, id: NodeId) -> Option<NodeId> {
+        self.wires.get(id)
+            .and_then(|mb_nnb| mb_nnb.as_ref())
+            .and_then(|nnb| nnb.first())
+            .copied()
+    }
+
+    /// Return an iterator over the IDs of neighbors of the given node ID,
+    /// visited in arbitrary order, if they exist.
+    ///
+    /// Note that this iterator will contain duplicate elements if there are
+    /// multiple wires going to the same neighbor.
+    ///
+    /// The iterator item type is [`NodeId`].
+    pub fn neighbor_ids_of(&self, id: NodeId) -> Option<NeighborIds<'_>> {
+        self.wires.get(id)
+            .and_then(|mb_nnb| {
+                mb_nnb.as_ref()
+                    .map(|nnb| {
+                        NeighborIds {
+                            id,
+                            switch: true,
+                            iter: nnb.iter(),
+                        }
+                    })
+            })
+    }
+
+    /// Find the ID of the first neighbor of the given node ID that satisfies
+    /// some predicate, if it exists.
+    pub fn find_neighbor_id_of<F>(&self, id: NodeId, mut pred: F)
+        -> Option<NodeId>
+    where F: FnMut(NodeId) -> bool
+    {
+        self.neighbor_ids_of(id)
+            .and_then(|mut nnb| nnb.find(|id| pred(*id)))
+    }
+
+    /// Find the ID of the first neighbor of the given node ID that satisfies
+    /// some predicate, if it exists, and map to some output.
+    pub fn find_map_neighbor_id_of<F, U>(&self, id: NodeId, pred: F)
+        -> Option<U>
+    where F: FnMut(NodeId) -> Option<U>
+    {
+        self.neighbor_ids_of(id)
+            .and_then(|mut nnb| nnb.find_map(pred))
+    }
+
     /// Return an iterator over neighbors of the given node ID, visited in
     /// arbitrary order, if it exists.
     ///
@@ -661,6 +768,26 @@ impl Diagram {
             })
     }
 
+    /// Find the first neighbor of the given node ID that satisfies some
+    /// predicate, if it and the ID exist.
+    pub fn find_neighbor_of<F>(&self, id: NodeId, mut pred: F)
+        -> Option<(NodeId, &Node)>
+    where F: FnMut(NodeId, &Node) -> bool
+    {
+        self.neighbors_of(id)
+            .and_then(|mut nnb| nnb.find(|(id, n)| pred(*id, n)))
+    }
+
+    /// Find the first neighbor of the given node ID that satisfies some
+    /// predicate, if it and the ID exist, and map to some output.
+    pub fn find_map_neighbor_of<F, U>(&self, id: NodeId, mut pred: F)
+        -> Option<U>
+    where F: FnMut(NodeId, &Node) -> Option<U>
+    {
+        self.neighbors_of(id)
+            .and_then(|mut nnb| nnb.find_map(|(id, n)| pred(id, n)))
+    }
+
     /// Return an iterator over all interior (non-input/output) neighbors of the
     /// given node ID, visited in arbitrary order, if it exists.
     ///
@@ -673,26 +800,51 @@ impl Diagram {
             .map(|iter| NeighborsInner { iter })
     }
 
-    /// Create a copy of `self` with swapped inputs and outputs, the signs of
-    /// all spiders' phases flipped, and all H-boxes' arguments conjugated.
+    /// Find the first interior (non-input/output) neighbor of the given node ID
+    /// that satisfies some predicate, if it and the ID exist.
+    pub fn find_neighbor_of_inner<F>(&self, id: NodeId, mut pred: F)
+        -> Option<(NodeId, &Node)>
+    where F: FnMut(NodeId, &Node) -> bool
+    {
+        self.neighbors_of_inner(id)
+            .and_then(|mut nnb| nnb.find(|(id, n)| pred(*id, n)))
+    }
+
+    /// Find the first interior (non-input/output) neighbor of the given node ID
+    /// that satisfies some predicate, if it and the ID exist, and map to some
+    /// output.
+    pub fn find_map_neighbor_of_inner<F, U>(&self, id: NodeId, mut pred: F)
+        -> Option<U>
+    where F: FnMut(NodeId, &Node) -> Option<U>
+    {
+        self.neighbors_of_inner(id)
+            .and_then(|mut nnb| nnb.find_map(|(id, n)| pred(id, n)))
+    }
+
+    /// Create a copy of `self` with inputs and outputs swapped, the signs of
+    /// all spiders' phases flipped, and all H-boxes' arguments and the global
+    /// scalar conjugated.
     pub fn adjoint(&self) -> Self {
         self.clone().into_adjoint()
     }
 
     /// Swap inputs and outputs, flip the signs of all spiders' phases, and
-    /// conjugate all H-boxes' arguments, consuming `self`.
+    /// conjugate all H-boxes' arguments as well as the global scalar, consuming
+    /// `self`.
     pub fn into_adjoint(mut self) -> Self {
         self.adjoint_mut();
         self
     }
 
     /// Swap inputs and outputs, flip the signs of all spiders' phases, and
-    /// conjugate all H-box arguments, modifying `self` in place.
+    /// conjugate all H-box arguments as well as the global scalar, modifying
+    /// `self` in place.
     pub fn adjoint_mut(&mut self) -> &mut Self {
         self.nodes.iter_mut()
             .flatten()
             .for_each(|node| { node.adjoint_mut(); });
         std::mem::swap(&mut self.inputs, &mut self.outputs);
+        self.scalar = self.scalar.conj();
         self
     }
 
@@ -705,6 +857,7 @@ impl Diagram {
             mut inputs,
             mut outputs,
             mut free,
+            scalar,
         } = other;
         let shift = self.nodes.len();
         wires.iter_mut()
@@ -724,6 +877,7 @@ impl Diagram {
         self.inputs.append(&mut inputs);
         self.outputs.append(&mut outputs);
         self.free.append(&mut free);
+        self.scalar *= scalar;
         shift
     }
 
@@ -963,7 +1117,7 @@ impl Diagram {
     fn ketbra_explore<'a>(
         &'a self,
         wire_nums: &WireStore,
-        visited: &mut FxHashSet<NodeId>,
+        visited: &mut Vec<NodeId>,
         to_visit: &mut VecDeque<(NodeId, &'a Node)>,
         elements: &mut Vec<ketbra::Element>,
     ) {
@@ -985,7 +1139,7 @@ impl Diagram {
         let mut bell_wires: Vec<(usize, usize)> = Vec::new(); // for self-loop wires
         let mut empty_wires: Vec<(QubitId, QubitId)> = Vec::new(); // direct input-to-output
         while let Some((id, node)) = to_visit.pop_back() {
-            visited.insert(id);
+            visited.push(id);
             ins = Vec::new();
             outs = Vec::new();
             for (id2, node2) in self.neighbors_of(id).unwrap() {
@@ -1000,7 +1154,7 @@ impl Diagram {
                 }
                 // empty wires
                 if node.is_input() && node2.is_output() {
-                    visited.insert(id2);
+                    visited.push(id2);
                     let qin = self.get_input_index(id).unwrap();
                     let qout = self.get_output_index(id).unwrap();
                     empty_wires.push((qin, qout));
@@ -1094,7 +1248,7 @@ impl Diagram {
         let wire_nums: WireStore = self.wires().collect();
 
         // first step: all non-scalar nodes
-        let mut visited: FxHashSet<NodeId> = FxHashSet::default();
+        let mut visited: Vec<NodeId> = Vec::with_capacity(self.node_count);
         // init with input nodes to make sure they're seen first
         let mut to_visit: VecDeque<(NodeId, &Node)> =
             self.inputs()
@@ -1145,7 +1299,8 @@ impl Diagram {
                 .collect();
         }
         let mut to_visit: VecDeque<NodeId>;
-        let mut io_visited: FxHashSet<NodeId> = FxHashSet::default();
+        let mut io_visited: Vec<NodeId> =
+            Vec::with_capacity(self.inputs.len() + self.outputs.len());
         for io in self.inputs.iter().chain(&self.outputs).copied() {
             if io_visited.contains(&io) { continue; }
             to_visit = vec![io].into();
@@ -1155,7 +1310,7 @@ impl Diagram {
                         to_visit.push_front(id2);
                     }
                     if node2.is_input() || node2.is_output() {
-                        io_visited.insert(id2);
+                        io_visited.push(id2);
                         nodes[id2] = None;
                     }
                 }
@@ -1534,7 +1689,7 @@ impl<'a> std::iter::FusedIterator for Outputs<'a> { }
 pub struct Wires<'a> {
     nb_group: Option<(NodeId, std::slice::Iter<'a, NodeId>)>,
     len: usize,
-    seen: FxHashSet<(NodeId, NodeId)>,
+    seen: Vec<(NodeId, NodeId)>,
     iter: std::iter::Enumerate<std::slice::Iter<'a, Option<Vec<NodeId>>>>,
 }
 
@@ -1556,7 +1711,7 @@ impl<'a> Iterator for Wires<'a> {
                     if self.seen.contains(&pair) {
                         continue;
                     } else {
-                        self.seen.insert(pair_rev);
+                        self.seen.push(pair_rev);
                         self.len = self.len.saturating_sub(1);
                         return Some(pair);
                     }
@@ -1590,7 +1745,7 @@ impl<'a> DoubleEndedIterator for Wires<'a> {
                     if self.seen.contains(&pair) {
                         continue;
                     } else {
-                        self.seen.insert(pair_rev);
+                        self.seen.push(pair_rev);
                         self.len = self.len.saturating_sub(1);
                         return Some(pair);
                     }
@@ -1728,6 +1883,61 @@ impl<'a> DoubleEndedIterator for WiresDataInner<'a> {
 }
 
 impl<'a> std::iter::FusedIterator for WiresDataInner<'a> { }
+
+/// Iterator over neighbor IDs of a node, visited in arbitrary order.
+///
+/// Node that this iterator will contain duplicate elements if there are
+/// multiple wires going to the same neighbor; if the node is connected to
+/// itself, each such connection will be counted only once.
+///
+/// The iterator item type is [`NodeId`].
+pub struct NeighborIds<'a> {
+    id: NodeId,
+    switch: bool,
+    iter: std::slice::Iter<'a, NodeId>,
+}
+
+impl<'a> Iterator for NeighborIds<'a> {
+    type Item = NodeId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.find(|id| {
+            if **id == self.id {
+                if self.switch {
+                    self.switch = false;
+                    true
+                } else {
+                    self.switch = true;
+                    false
+                }
+            } else {
+                true
+            }
+        })
+        .copied()
+    }
+}
+
+impl<'a> DoubleEndedIterator for NeighborIds<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter.rfind(|id| {
+            if **id == self.id {
+                if self.switch {
+                    self.switch = false;
+                    true
+                } else {
+                    self.switch = true;
+                    false
+                }
+            } else {
+                true
+            }
+        })
+        .copied()
+    }
+}
+
+impl<'a> std::iter::FusedIterator for NeighborIds<'a> { }
 
 /// Iterator over neighbors of a node, visited in arbitrary order.
 ///
@@ -2148,6 +2358,12 @@ mod tests {
         assert_eq!(dg.remove_wires(0, 1, None).unwrap(), 5);
         assert_eq!(dg.count_wires(), 7);
         assert_eq!(dg.mutual_arity(0, 1), Some(0));
+        (0..3).for_each(|_| { dg.add_wire(0, 0).unwrap(); });
+        assert_eq!(dg.count_wires(), 10);
+        assert_eq!(dg.mutual_arity(0, 0), Some(3));
+        assert_eq!(dg.remove_wires(0, 0, None).unwrap(), 3);
+        assert_eq!(dg.count_wires(), 7);
+        assert_eq!(dg.mutual_arity(0, 0), Some(0));
     }
 
     #[test]

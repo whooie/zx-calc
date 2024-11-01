@@ -175,6 +175,7 @@ impl FromIterator<(usize, State)> for States {
                 unreachable!()
             }
         }
+        if data.is_empty() { k_min = 0; }
         Self { offs: k_min, data, count }
     }
 }
@@ -269,7 +270,9 @@ impl States {
 
     /// Get a reference to the state associated with the `k`-th index.
     pub fn get(&self, k: usize) -> Option<&State> {
-        if k < self.offs || k > self.offs + self.data.len() - 1 {
+        if self.data.is_empty()
+            || k < self.offs || k > self.offs + self.data.len() - 1
+        {
             None
         } else {
             self.data[k - self.offs].as_ref()
@@ -278,7 +281,9 @@ impl States {
 
     /// Get a mutable reference to the state associated with the `k`-th index.
     pub fn get_mut(&mut self, k: usize) -> Option<&mut State> {
-        if k < self.offs || k > self.offs + self.data.len() - 1 {
+        if self.data.is_empty()
+            || k < self.offs || k > self.offs + self.data.len() - 1
+        {
             None
         } else {
             self.data[k - self.offs].as_mut()

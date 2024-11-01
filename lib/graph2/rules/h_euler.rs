@@ -1,8 +1,11 @@
 use crate::phase::Phase;
 use super::*;
 
-/// Two spiders of arbitrarity arity and phase with the same color sandwiching
-/// an H-box with default argument on a single wire.
+/// Replace an H-box on a single wire joining two spiders of the same color with
+/// its Euler angle decomposition, fusing spiders afterward.
+///
+/// ![h_euler][h_euler]
+#[embed_doc_image::embed_doc_image("h_euler", "assets/rules/HEuler.svg")]
 #[derive(Copy, Clone, Debug)]
 pub struct HEuler;
 
@@ -40,13 +43,13 @@ impl<'a> Rule for HEulerData<'a> {
     fn simplify(self) {
         let Self { dg, s1, h, s2 } = self;
         dg.nodes[s1].as_mut().unwrap()
-            .map_phase(|ph| ph - Phase::pi2());
+            .map_phase(|ph| ph + Phase::pi2());
         dg.nodes[s2].as_mut().unwrap()
-            .map_phase(|ph| ph - Phase::pi2());
+            .map_phase(|ph| ph + Phase::pi2());
         if dg.nodes[s1].as_ref().unwrap().is_z() {
-            let _ = dg.nodes[h].insert(Node::X(-Phase::pi2()));
+            let _ = dg.nodes[h].insert(Node::X(Phase::pi2()));
         } else {
-            let _ = dg.nodes[h].insert(Node::Z(-Phase::pi2()));
+            let _ = dg.nodes[h].insert(Node::Z(Phase::pi2()));
         }
         if dg.nodes[s1].as_ref().unwrap()
             .is_spider_and(|ph| ph == Phase::zero())
