@@ -41,6 +41,7 @@ impl<'a> Rule for HHopfData<'a> {
         let Self { dg, z, h } = self;
         let w = dg.mutual_arity(z, h).unwrap();
         dg.remove_wires(z, h, Some(w - 1)).unwrap();
+        dg.scalar *= std::f64::consts::SQRT_2.powi((w - 1) as i32);
         if dg.arity(z).unwrap() == 2
             && dg.get_node(z).unwrap().has_phase(Phase::zero())
         {

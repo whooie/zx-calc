@@ -48,12 +48,20 @@ impl<'a> Rule for StateCopyData<'a> {
     fn simplify(self) {
         let Self { dg, state, spider } = self;
         let n = dg.remove_node(state).unwrap();
-        let (_, nnb) = dg.remove_node_nb(spider).unwrap();
+        let (state, nnb) = dg.remove_node_nb(spider).unwrap();
+        let len_nnb = nnb.len();
+        let state_phase = state.phase().unwrap();
+        let spider_phase = dg.get_node(spider).unwrap().phase().unwrap();
         for nb in nnb.into_iter() {
             if nb == spider { continue; }
             let new = dg.add_node(n);
             dg.add_wire(new, nb).unwrap();
         }
+        dg.scalar *=
+            (
+                (1.0 + spider_phase.cis())
+                + state_phase.cis() * (1.0 - spider_phase.cis())
+            ) * std::f64::consts::FRAC_1_SQRT_2.powi(len_nnb as i32 + 1);
     }
 }
 

@@ -15,9 +15,10 @@ pub struct HExplodeAll;
 
 /// An X-state/H-box pair used by [`HExplodeAll`].
 ///
-/// The first item is the ID of a unary X-spider with phase 0 and the second is
-/// the ID of the H-box it's connected to.
-pub type XHPair = (NodeId, NodeId);
+/// The first item is the ID of a unary X-spider with phase 0; the second is the
+/// ID of the H-box it's connected to; and the last is `true` when the H-box has
+/// arity 2 and argument –1.
+pub type XHPair = (NodeId, NodeId, bool);
 
 /// Output of [`HExplodeAll::find`].
 #[derive(Debug)]
@@ -55,7 +56,9 @@ impl RuleFinder for HExplodeAll {
                         ).then_some(id2)
                     });
                 if let Some(x) = mb_x {
-                    groups.push((x, id));
+                    let is_had =
+                        dg.arity(id).unwrap() == 2 && node.has_defarg();
+                    groups.push((x, id, is_had));
                 }
             }
         }
@@ -71,13 +74,22 @@ impl<'a> RuleSeal for HExplodeAllData<'a> { }
 impl<'a> Rule for HExplodeAllData<'a> {
     fn simplify(self) {
         let Self { dg, groups } = self;
-        for (x, h) in groups.into_iter() {
+        for (x, h, is_had) in groups.into_iter() {
             dg.remove_node(x).unwrap();
-            let (_, nnb) = dg.remove_node_nb(h).unwrap();
-            for nb in nnb.into_iter() {
-                if nb == h { continue; }
-                let z = dg.add_node(Node::z());
-                dg.add_wire(z, nb).unwrap();
+            if is_had {
+                let n = dg.get_node_mut(h).unwrap();
+                *n = Node::z();
+            } else {
+                let (_, nnb) = dg.remove_node_nb(h).unwrap();
+                for nb in nnb.into_iter() {
+                    if nb == h {
+                        dg.scalar *= 2.0;
+                        continue;
+                    }
+                    let z = dg.add_node(Node::z());
+                    dg.add_wire(z, nb).unwrap();
+                }
+                dg.scalar *= std::f64::consts::SQRT_2;
             }
         }
     }

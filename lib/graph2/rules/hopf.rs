@@ -4,7 +4,7 @@ use super::*;
 ///
 /// ![hopf][hopf]
 #[embed_doc_image::embed_doc_image("hopf", "assets/rules/Hopf.svg")]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Hopf;
 
 /// Output of [`Hopf::find`].
@@ -47,6 +47,7 @@ impl<'a> Rule for HopfData<'a> {
     fn simplify(self) {
         let HopfData { dg, s1, s2, n } = self;
         dg.remove_wires(s1, s2, Some(2 * (n / 2))).unwrap();
+        dg.scalar *= std::f64::consts::FRAC_1_SQRT_2.powi(2 * (n / 2) as i32)
     }
 }
 

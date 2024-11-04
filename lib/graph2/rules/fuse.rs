@@ -5,7 +5,7 @@ use super::*;
 ///
 /// ![fuse][fuse]
 #[embed_doc_image::embed_doc_image("fuse", "assets/rules/Fuse.svg")]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Fuse;
 
 /// Output of [`Fuse::find`].

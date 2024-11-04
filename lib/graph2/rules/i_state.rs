@@ -59,6 +59,13 @@ impl<'a> Rule for IStateData<'a> {
             let n = dg.get_node_mut(state.0).unwrap();
             *n = Node::Z(-state.1);
         }
+        if state.1 == Phase::pi2() {
+            dg.scalar *= Phase::pi4().cis();
+        } else if state.1 == -Phase::pi2() {
+            dg.scalar *= -Phase::pi4().cis();
+        } else {
+            unreachable!()
+        }
     }
 }
 

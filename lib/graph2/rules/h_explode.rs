@@ -14,7 +14,7 @@ pub struct HExplode;
 pub struct HExplodeData<'a> {
     pub(crate) dg: &'a mut Diagram,
     pub(crate) x: NodeId,
-    pub(crate) h: NodeId,
+    pub(crate) h: (NodeId, bool),
 }
 
 impl RuleSeal for HExplode { }
@@ -27,8 +27,11 @@ impl RuleFinder for HExplode {
             if node.is_x_and(|ph| ph == zero) && dg.arity(id).unwrap() == 1 {
                 let mb_h =
                     dg.neighbors_of(id).unwrap()
-                    .find_map(|(id2, node2)| node2.is_h().then_some(id2));
-                if let Some(h) = mb_h {
+                    .find(|(_, node2)| node2.is_h());
+                if let Some((id2, node2)) = mb_h {
+                    let is_had =
+                        dg.arity(id2).unwrap() == 2 && node2.has_defarg();
+                    let h = (id2, is_had);
                     return Some(HExplodeData { dg, x: id, h });
                 }
             }
@@ -40,13 +43,22 @@ impl RuleFinder for HExplode {
 impl<'a> RuleSeal for HExplodeData<'a> { }
 impl<'a> Rule for HExplodeData<'a> {
     fn simplify(self) {
-        let Self { dg, x, h } = self;
+        let Self { dg, x, h: (h, is_had) } = self;
         dg.remove_node(x).unwrap();
-        let (_, nnb) = dg.remove_node_nb(h).unwrap();
-        for nb in nnb.into_iter() {
-            if nb == h { continue; }
-            let z = dg.add_node(Node::z());
-            dg.add_wire(z, nb).unwrap();
+        if is_had {
+            let n = dg.get_node_mut(h).unwrap();
+            *n = Node::z();
+        } else {
+            let (_, nnb) = dg.remove_node_nb(h).unwrap();
+            for nb in nnb.into_iter() {
+                if nb == h {
+                    dg.scalar *= 2.0;
+                    continue;
+                }
+                let z = dg.add_node(Node::z());
+                dg.add_wire(z, nb).unwrap();
+            }
+            dg.scalar *= std::f64::consts::SQRT_2;
         }
     }
 }

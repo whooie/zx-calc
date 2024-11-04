@@ -80,6 +80,13 @@ impl<'a> Rule for IStateAllData<'a> {
                 let n = dg.get_node_mut(state).unwrap();
                 *n = Node::Z(-ph0);
             }
+            if ph0 == Phase::pi2() {
+                dg.scalar *= Phase::pi4().cis();
+            } else if ph0 == -Phase::pi2() {
+                dg.scalar *= -Phase::pi4().cis();
+            } else {
+                unreachable!()
+            }
         }
     }
 }

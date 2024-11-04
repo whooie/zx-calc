@@ -78,42 +78,63 @@ impl<'a> RuleSeal for ScalarPairAllData<'a> { }
 impl<'a> Rule for ScalarPairAllData<'a> {
     fn simplify(self) {
         use Node::*;
+        use std::f64::consts::{ SQRT_2, FRAC_1_SQRT_2 };
+        const EPSILON: f64 = 1e-12;
         let Self { dg, groups } = self;
         for (n1, n2) in groups.into_iter() {
             if let Some((n2, nwires)) = n2 {
                 let (n1, _) = dg.delete_node(n1).unwrap();
                 let (n2, _) = dg.delete_node(n2).unwrap();
-                let z: C64 =
-                    match (n1, n2) {
-                        (Z(ph1), Z(ph2)) | (X(ph1), X(ph2)) =>
-                            1.0 + (ph1 + ph2).cis(),
+            let z: C64 =
+                match (n1, n2) {
+                    (Z(ph1), Z(ph2)) | (X(ph1), X(ph2)) =>
+                        1.0 + (ph1 + ph2).cis(),
 
-                        (Z(ph1), X(ph2)) | (X(ph2), Z(ph1)) =>
-                            if nwires % 2 == 0 {
-                                (1.0 + ph1.cis()) * (1.0 * ph2.cis())
-                                    / 2.0_f64.powi(nwires as i32 / 2)
-                            } else {
-                                ((1.0 + ph1.cis()) + ph2.cis() * (1.0 - ph1.cis()))
-                                    / 2.0_f64.powf(nwires as f64 / 2.0)
-                            },
+                    (Z(ph1), X(ph2)) | (X(ph2), Z(ph1)) =>
+                        if nwires % 2 == 0 {
+                            (1.0 + ph1.cis()) * (1.0 + ph2.cis())
+                                * FRAC_1_SQRT_2.powi(nwires as i32)
+                        } else {
+                            ((1.0 + ph2.cis()) + ph1.cis() * (1.0 - ph2.cis()))
+                                * FRAC_1_SQRT_2.powi(nwires as i32)
+                        },
 
-                        (Z(ph), H(a)) | (H(a), Z(ph)) =>
-                            1.0 + a * ph.cis(),
+                    (Z(ph), H(a)) | (H(a), Z(ph)) =>
+                        if (a + 1.0).norm() < EPSILON && nwires == 2 {
+                            (1.0 - ph.cis()) * FRAC_1_SQRT_2
+                        } else {
+                            1.0 + a * ph.cis()
+                        },
 
-                        (X(ph), H(a)) | (H(a), X(ph)) =>
-                            if nwires % 2 == 0 {
-                                2.0_f64.powi(nwires as i32) - 1.0 + a
-                                    + ph.cis() * (a - 1.0)
-                            } else {
-                                2.0_f64.powi(nwires as i32) - 1.0 + a
-                                    - ph.cis() * (a - 1.0)
-                            },
+                    (X(ph), H(a)) | (H(a), X(ph)) =>
+                        if (a + 1.0).norm() < EPSILON && nwires == 2 {
+                            (1.0 - ph.cis()) * FRAC_1_SQRT_2
+                        } else if nwires % 2 == 0 {
+                            SQRT_2.powi(nwires as i32)
+                            + (a - 1.0) * (1.0 + ph.cis())
+                                * FRAC_1_SQRT_2.powi(nwires as i32)
+                        } else {
+                            SQRT_2.powi(nwires as i32)
+                            + (a - 1.0) * (1.0 - ph.cis())
+                                * FRAC_1_SQRT_2.powi(nwires as i32)
+                        },
 
-                        (H(a), H(b)) =>
-                            2.0_f64.powi(nwires as i32) - 1.0 + a * b,
-
-                        _ => unreachable!(),
-                    };
+                    (H(a), H(b)) => {
+                        let a_check = (a + 1.0).norm() < EPSILON;
+                        let b_check = (b + 1.0).norm() < EPSILON;
+                        match (a_check, b_check) {
+                            (true, true) if nwires == 2 =>
+                                2.0.into(),
+                            (true, false) if nwires == 2 =>
+                                2.0 * SQRT_2 - (b + 1.0) * FRAC_1_SQRT_2,
+                            (false, true) if nwires == 2 =>
+                                2.0 * SQRT_2 - (a + 1.0) * FRAC_1_SQRT_2,
+                            _ =>
+                                2.0_f64.powi(nwires as i32) - 1.0 + a * b,
+                        }
+                    },
+                    _ => unreachable!(),
+                };
                 dg.scalar *= z;
             } else {
                 let (n1, _) = dg.delete_node(n1).unwrap();

@@ -45,8 +45,10 @@ impl<'a> RuleSeal for HAbsorbData<'a> { }
 impl<'a> Rule for HAbsorbData<'a> {
     fn simplify(self) {
         let Self { dg, states } = self;
+        let nstates = states.len();
         states.into_iter()
             .for_each(|id| { dg.remove_node(id).unwrap(); });
+        dg.scalar *= std::f64::consts::SQRT_2.powi(nstates as i32);
     }
 }
 

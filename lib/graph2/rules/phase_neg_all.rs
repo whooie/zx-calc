@@ -97,6 +97,8 @@ impl<'a> Rule for PhaseNegAllData<'a> {
             }
             dg.get_node_mut(s).unwrap()
                 .map_phase(|ph| -ph);
+            let ph = dg.get_node(s).unwrap().phase().unwrap();
+            dg.scalar *= ph.cis();
         }
     }
 }

@@ -4,7 +4,7 @@ use super::*;
 ///
 /// ![h2hopf][h2hopf]
 #[embed_doc_image::embed_doc_image("h2hopf", "assets/rules/H2Hopf.svg")]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct H2Hopf;
 
 /// Output of [`H2Hopf::find`].
@@ -59,6 +59,7 @@ impl<'a> Rule for H2HopfData<'a> {
         let n = hboxes.len();
         hboxes.into_iter().take(2 * (n / 2))
             .for_each(|h| { dg.remove_node(h).unwrap(); });
+        dg.scalar *= std::f64::consts::FRAC_1_SQRT_2.powi(2 * (n / 2) as i32);
     }
 }
 

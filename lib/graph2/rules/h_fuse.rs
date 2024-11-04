@@ -42,7 +42,16 @@ impl RuleFinder for HFuse {
 impl<'a> RuleSeal for HFuseData<'a> { }
 impl<'a> Rule for HFuseData<'a> {
     fn simplify(self) {
+        const EPSILON: f64 = 1e-12;
         let Self { dg, ha, h1, h2 } = self;
+        // the scalar for the general case is √2; this gets reduced to 1 if ha
+        // is binary with argument -1 or h2 is binary (with argument -1).
+        let arg = dg.get_node(ha).unwrap().arg().unwrap();
+        if !((arg + 1.0).norm() < EPSILON && dg.arity(ha).unwrap() == 2)
+            && dg.arity(h2).unwrap() != 2
+        {
+            dg.scalar *= std::f64::consts::SQRT_2;
+        }
         dg.remove_node(h1).unwrap();
         let (_, nnb) = dg.remove_node_nb(h2).unwrap();
         nnb.into_iter()

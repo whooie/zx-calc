@@ -1,3 +1,4 @@
+use num_complex::Complex64 as C64;
 use crate::phase::Phase;
 use super::*;
 
@@ -13,8 +14,8 @@ pub struct HAvg;
 #[derive(Debug)]
 pub struct HAvgData<'a> {
     pub(crate) dg: &'a mut Diagram,
-    pub(crate) h1: NodeId,
-    pub(crate) h2: NodeId,
+    pub(crate) h1: (NodeId, C64),
+    pub(crate) h2: (NodeId, C64),
     pub(crate) x: NodeId,
     pub(crate) z: (NodeId, Phase, usize),
 }
@@ -38,8 +39,8 @@ impl RuleFinder for HAvg {
                 && dg.mutual_arity(id, p[0].0).unwrap() == 1
         };
         let p = dg.find_path(dg.nodes_inner(), &[n0, n1, n2, n3])?;
-        let h1 = p[1].0;
-        let h2 = p[3].0;
+        let h1 = (p[1].0, p[1].1.arg().unwrap());
+        let h2 = (p[3].0, p[3].1.arg().unwrap());
         let x = p[0].0;
         let z = (p[2].0, p[2].1.phase().unwrap(), dg.arity(p[2].0).unwrap());
         Some(HAvgData { dg, h1, h2, x, z })
@@ -49,17 +50,32 @@ impl RuleFinder for HAvg {
 impl<'a> RuleSeal for HAvgData<'a> { }
 impl<'a> Rule for HAvgData<'a> {
     fn simplify(self) {
+        const EPSILON: f64 = 1e-12;
         let Self { dg, h1, h2, x, z } = self;
         dg.remove_node(x).unwrap();
-        let Node::H(a1) = dg.remove_node(h1).unwrap() else { unreachable!() };
-        let Node::H(a2) = dg.remove_node(h2).unwrap() else { unreachable!() };
-        if z.1 == Phase::zero() && z.2 == 3 {
-            let n = dg.get_node_mut(z.0).unwrap();
-            *n = Node::H((a1 + a2) / 2.0);
-        } else {
-            let h = dg.add_node(Node::H((a1 + a2) / 2.0));
-            dg.add_wire(h, z.0).unwrap();
+        let is_had1 = (h1.1 + 1.0).norm() < EPSILON;
+        let is_had2 = (h2.1 + 1.0).norm() < EPSILON;
+        if is_had1 && is_had2 {
+            dg.remove_node(h1.0).unwrap();
+            dg.remove_node(h2.0).unwrap();
+            dg.get_node_mut(z.0).unwrap()
+                .map_phase(|ph| ph + Phase::pi());
+            return;
         }
+        let rem_z = z.1 == Phase::zero() && z.2 == 3;
+        let scalar =
+            if is_had1 || is_had2 { std::f64::consts::SQRT_2 } else { 2.0 };
+        let node =
+            if rem_z {
+                dg.remove_node(h1.0).unwrap();
+                dg.remove_node(h2.0).unwrap();
+                dg.get_node_mut(z.0).unwrap()
+            } else {
+                dg.remove_node(h2.0).unwrap();
+                dg.get_node_mut(h1.0).unwrap()
+            };
+        *node = Node::H((h1.1 + h2.1) / 2.0);
+        dg.scalar *= scalar;
     }
 }
 

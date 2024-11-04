@@ -5,7 +5,7 @@ use super::*;
 ///
 /// ![h_move][h_move]
 #[embed_doc_image::embed_doc_image("h_move", "assets/rules/HMove.svg")]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct HMove;
 
 /// Output of [`HMove::find`].

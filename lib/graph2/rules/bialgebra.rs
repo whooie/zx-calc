@@ -45,14 +45,18 @@ impl<'a> RuleSeal for BialgebraData<'a> { }
 impl<'a> Rule for BialgebraData<'a> {
     fn simplify(self) {
         let Self { dg, z1, z2, x1, x2 } = self;
+        let pi = Phase::pi();
+        dg.scalar *= std::f64::consts::FRAC_1_SQRT_2;
         let (new_z, move_ph_z) =
             if z1 == z2 && z1.1.is_mult(2) && z2.1.is_mult(2) {
+                if z1.1 == pi { dg.scalar *= -1.0; }
                 (dg.add_node(Node::Z(z1.1)), true)
             } else {
                 (dg.add_node(Node::z()), false)
             };
         let (new_x, move_ph_x) =
             if x1 == x2 && x1.1.is_mult(2) && x2.1.is_mult(2) {
+                if x1.1 == pi { dg.scalar *= -1.0; }
                 (dg.add_node(Node::X(x1.1)), true)
             } else {
                 (dg.add_node(Node::x()), false)

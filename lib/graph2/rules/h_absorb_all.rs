@@ -70,9 +70,12 @@ impl<'a> RuleSeal for HAbsorbAllData<'a> { }
 impl<'a> Rule for HAbsorbAllData<'a> {
     fn simplify(self) {
         let Self { dg, groups } = self;
-        groups.into_iter()
-            .flatten()
-            .for_each(|id| { dg.remove_node(id).unwrap(); });
+        for states in groups.into_iter() {
+            let nstates = states.len();
+            states.into_iter()
+                .for_each(|id| { dg.remove_node(id).unwrap(); });
+            dg.scalar *= std::f64::consts::SQRT_2.powi(nstates as i32);
+        }
     }
 }
 

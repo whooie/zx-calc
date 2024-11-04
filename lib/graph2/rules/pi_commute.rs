@@ -56,7 +56,8 @@ impl<'a> Rule for PiCommuteData<'a> {
         let (nodemin, nnbmin) = dg.delete_node(smin).unwrap();
         let phmin = nodemin.phase().unwrap();
         dg.nodes[smax].as_mut().unwrap()
-            .map_phase(|phmax| phmin - phmax);
+            .map_phase(|phmax| phmax - phmin);
+        dg.scalar *= (-phmin).cis();
         let mut self_loops: usize = 0;
         let pi_spiders: Vec<NodeId> =
             nnbmin.into_iter()
@@ -81,6 +82,6 @@ impl<'a> Rule for PiCommuteData<'a> {
             .for_each(|(nb, snew)| { *nb = snew; });
         (0..self_loops)
             .for_each(|_| { dg.add_wire(smax, smax).unwrap(); });
-        }
+    }
 }
 

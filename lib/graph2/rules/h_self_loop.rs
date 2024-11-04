@@ -35,9 +35,17 @@ impl<'a> RuleSeal for HSelfLoopData<'a> { }
 impl<'a> Rule for HSelfLoopData<'a> {
     fn simplify(self) {
         let Self { dg, h } = self;
-        let n = dg.remove_wires(h, h, None).unwrap() as i32;
-        dg.get_node_mut(h).unwrap()
-            .map_arg(|a| 1.0 + (a - 1.0) / 2.0_f64.powi(n));
+        if dg.arity(h).unwrap() == 2
+            && dg.get_node(h).unwrap().has_defarg()
+        {
+            dg.remove_node(h).unwrap();
+            dg.scalar = 0.0.into();
+        } else {
+            let n = dg.remove_wires(h, h, None).unwrap() as i32;
+            dg.get_node_mut(h).unwrap()
+                .map_arg(|a| 1.0 + (a - 1.0) / 2.0_f64.powi(n));
+            dg.scalar *= 2.0_f64.powi(n);
+        }
     }
 }
 

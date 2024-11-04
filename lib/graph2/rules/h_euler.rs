@@ -6,7 +6,7 @@ use super::*;
 ///
 /// ![h_euler][h_euler]
 #[embed_doc_image::embed_doc_image("h_euler", "assets/rules/HEuler.svg")]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct HEuler;
 
 /// Output of [`HEuler::find`].
@@ -71,6 +71,7 @@ impl<'a> Rule for HEulerData<'a> {
             dg.remove_node(s2).unwrap();
             dg.add_wire(nb1, nb2).unwrap();
         }
+        dg.scalar *= (-Phase::pi4()).cis();
     }
 }
 

@@ -5,7 +5,7 @@ use super::*;
 /// vice-versa).
 ///
 /// ![color flip][color_flip]
-#[embed_doc_image::embed_doc_image("color_clip", "assets/rules/ColorFlip.svg")]
+#[embed_doc_image::embed_doc_image("color_flip", "assets/rules/ColorFlip.svg")]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ColorFlip;
 

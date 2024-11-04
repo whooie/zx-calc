@@ -13,11 +13,10 @@ pub struct HIntro;
 #[derive(Debug)]
 pub struct HIntroData<'a> {
     pub(crate) dg: &'a mut Diagram,
-    pub(crate) z1: NodeId,
     pub(crate) x: NodeId,
-    pub(crate) h1: NodeId,
-    pub(crate) h2: NodeId,
-    pub(crate) z2: NodeId,
+    pub(crate) h1: (NodeId, bool), // (id, is_had)
+    pub(crate) h2: (NodeId, bool), // (id, is_had)
+    pub(crate) z: (NodeId, bool), // (id, phase == 0)
 }
 
 impl RuleSeal for HIntro { }
@@ -45,25 +44,32 @@ impl RuleFinder for HIntro {
                 && (n.arg().unwrap() - p[2].1.arg().unwrap()).norm() < EPSILON
         };
         let p = dg.find_path(dg.nodes_inner(), &[n0, n1, n2, n3, n4])?;
-        let z1 = p[0].0;
         let x = p[1].0;
-        let h1 = p[2].0;
-        let h2 = p[4].0;
-        let z2 = p[3].0;
-        Some(HIntroData { dg, z1, x, h1, h2, z2 })
+        let h1 = (p[2].0, p[2].1.has_defarg());
+        let h2 = (p[4].0, p[4].1.has_defarg());
+        let z = (p[3].0, p[3].1.has_defarg());
+        Some(HIntroData { dg, x, h1, h2, z })
     }
 }
 
 impl<'a> RuleSeal for HIntroData<'a> { }
 impl<'a> Rule for HIntroData<'a> {
     fn simplify(self) {
-        let Self { dg, z1: _, x, h1, h2, z2 } = self;
-        dg.remove_node(x).unwrap();
-        dg.remove_node(h2).unwrap();
-        if dg.arity(z2).unwrap() == 2 {
-            let nb = dg.find_neighbor_id_of(z2, |id| id != h1).unwrap();
-            dg.remove_node(z2).unwrap();
-            dg.add_wire(h1, nb).unwrap();
+        let Self { dg, x, h1, h2, z } = self;
+        if h1.1 && h2.1 {
+            dg.remove_node(h1.0).unwrap();
+            dg.remove_node(h2.0).unwrap();
+            dg.get_node_mut(z.0).unwrap()
+                .map_phase(|ph| ph + Phase::pi());
+            dg.scalar /= 2.0;
+        } else {
+            dg.remove_node(x).unwrap();
+            dg.remove_node(h2.0).unwrap();
+            if dg.arity(z.0).unwrap() == 2 && z.1 {
+                let h = dg.remove_node(h1.0).unwrap();
+                let n = dg.get_node_mut(z.0).unwrap();
+                *n = h;
+            }
         }
     }
 }

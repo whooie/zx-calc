@@ -79,6 +79,7 @@ impl<'a> Rule for HEulerColorFlipData<'a> {
             let n = dg.get_node_mut(s.0).unwrap();
             *n = Node::Z(s.1 - ph_sum);
         }
+        dg.scalar *= (ph_sum / 2).cis();
     }
 }
 

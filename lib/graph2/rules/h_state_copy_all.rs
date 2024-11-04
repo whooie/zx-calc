@@ -16,14 +16,15 @@ pub struct HStateCopyAll;
 /// A Z- or H-state/H-box pair used by [`HStateCopyAll`].
 ///
 /// The first item is the ID of a unary Z-spider with phase π or unary H-box
-/// with argument –1, and the second is the ID of the H-box it's connected to.
-pub type StateHPair = (NodeId, NodeId);
+/// with argument –1; the second is the ID of the H-box it's connected to; and
+/// the third is `true` if the H-box has arity 2 and argument –1.
+pub type StateHPair = (NodeId, NodeId, bool);
 
 /// Output of [`HStateCopyAll::find`].
 #[derive(Debug)]
 pub struct HStateCopyAllData<'a> {
     pub(crate) dg: &'a mut Diagram,
-    pub(crate) groups: Vec<StateHPair>, // [(z/h state, h-box)]
+    pub(crate) groups: Vec<StateHPair>, // [(z/h state, h-box, is_had)]
 }
 
 impl<'a> HStateCopyAllData<'a> {
@@ -51,10 +52,12 @@ impl RuleFinder for HStateCopyAll {
                     if dg.arity(id2).unwrap() == 1
                         && (
                             node2.is_z_and(|ph| ph == zero)
-                            || node2.is_h_and(|a| a.norm() < EPSILON)
+                            || node2.is_h_and(|a| (a + 1.0).norm() < EPSILON)
                         )
                     {
-                        groups.push((id2, id));
+                        let is_had =
+                            dg.arity(id).unwrap() == 2 && node.has_defarg();
+                        groups.push((id2, id, is_had));
                     }
                 }
             }
@@ -71,13 +74,25 @@ impl<'a> RuleSeal for HStateCopyAllData<'a> { }
 impl<'a> Rule for HStateCopyAllData<'a> {
     fn simplify(self) {
         let Self { dg, groups } = self;
-        for (state, h) in groups.into_iter() {
+        for (state, h, is_had) in groups.into_iter() {
             dg.remove_node(state).unwrap();
-            let (_, nnb) = dg.remove_node_nb(h).unwrap();
-            for nb in nnb.into_iter() {
-                if nb == h { continue; }
-                let x = dg.add_node(Node::X(Phase::pi()));
-                dg.add_wire(x, nb).unwrap();
+            if is_had {
+                let n = dg.get_node_mut(h).unwrap();
+                *n = Node::x_pi();
+            } else {
+                let (Node::H(a), nnb) = dg.remove_node_nb(h).unwrap()
+                    else { unreachable!() };
+                let nnb_len = nnb.len();
+                for nb in nnb.into_iter() {
+                    if nb == h {
+                        dg.scalar *= 2.0;
+                        continue;
+                    }
+                    let x = dg.add_node(Node::x_pi());
+                    dg.add_wire(x, nb).unwrap();
+                }
+                dg.scalar *=
+                    (1.0 - a) / std::f64::consts::SQRT_2.powi(nnb_len as i32);
             }
         }
     }

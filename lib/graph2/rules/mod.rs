@@ -7,7 +7,9 @@
 //! [`Diagram::simplify_rule_n`].
 //!
 //! Rules are chosen to prefer the elimination of wires and H-boxes, and convert
-//! X-spiders to Z-spiders where possible.
+//! X-spiders to Z-spiders where possible. H-boxes carry an extra scalar factor
+//! of 1/√2 when they are binary with argument –1 so that they coincide with the
+//! usual definition of the Hadamard gate.
 //!
 //! See [`Simplify`] for a master list of all simplify rules combined into a
 //! single type.
@@ -87,6 +89,8 @@ pub enum Simplify {
     HEulerColorFlip,
     /// [`HLoop`]
     HLoop,
+    /// [`HLoopAll`]
+    HLoopAll,
     /// [`HMove`]
     HMove,
     /// [`HSelfLoop`]
@@ -176,6 +180,7 @@ impl RuleFinder for Simplify {
             Self::HEuler            => Some(SimplifyData::HEuler(HEuler.find(dg)?)),
             Self::HEulerColorFlip   => Some(SimplifyData::HEulerColorFlip(HEulerColorFlip.find(dg)?)),
             Self::HLoop             => Some(SimplifyData::HLoop(HLoop.find(dg)?)),
+            Self::HLoopAll          => Some(SimplifyData::HLoopAll(HLoopAll.find(dg)?)),
             Self::HMove             => Some(SimplifyData::HMove(HMove.find(dg)?)),
             Self::HSelfLoop         => Some(SimplifyData::HSelfLoop(HSelfLoop.find(dg)?)),
             Self::HSelfLoopAll      => Some(SimplifyData::HSelfLoopAll(HSelfLoopAll.find(dg)?)),
@@ -238,6 +243,8 @@ pub enum SimplifyData<'a> {
     HEulerColorFlip(HEulerColorFlipData<'a>),
     /// [`HLoopData`]
     HLoop(HLoopData<'a>),
+    /// [`HLoopAllData`]
+    HLoopAll(HLoopAllData<'a>),
     /// [`HMoveData`]
     HMove(HMoveData<'a>),
     /// [`HSelfLoopData`]
@@ -324,6 +331,7 @@ impl<'a> Rule for SimplifyData<'a> {
             Self::HEuler(data)            => data.simplify(),
             Self::HEulerColorFlip(data)   => data.simplify(),
             Self::HLoop(data)             => data.simplify(),
+            Self::HLoopAll(data)          => data.simplify(),
             Self::HMove(data)             => data.simplify(),
             Self::HSelfLoop(data)         => data.simplify(),
             Self::HSelfLoopAll(data)      => data.simplify(),
@@ -383,6 +391,8 @@ mod h_euler_color_flip;
 pub use h_euler_color_flip::*;
 mod h_loop;
 pub use h_loop::*;
+mod h_loop_all;
+pub use h_loop_all::*;
 mod h_move;
 pub use h_move::*;
 mod h_self_loop;

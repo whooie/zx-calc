@@ -17,7 +17,7 @@ pub struct HStateCopy;
 pub struct HStateCopyData<'a> {
     pub(crate) dg: &'a mut Diagram,
     pub(crate) state: NodeId, // z-state or h-state
-    pub(crate) h: NodeId, // h-box copier
+    pub(crate) h: (NodeId, bool), // h-box copier
 }
 
 impl RuleSeal for HStateCopy { }
@@ -33,10 +33,13 @@ impl RuleFinder for HStateCopy {
                     if dg.arity(id2).unwrap() == 1
                         && (
                             node2.is_z_and(|ph| ph == zero)
-                            || node2.is_h_and(|a| a.norm() < EPSILON)
+                            || node2.is_h_and(|a| (a + 1.0).norm() < EPSILON)
                         )
                     {
-                        return Some(HStateCopyData { dg, state: id2, h: id });
+                        let is_had =
+                            dg.arity(id).unwrap() == 2 && node.has_defarg();
+                        let h = (id, is_had);
+                        return Some(HStateCopyData { dg, state: id2, h });
                     }
                 }
             }
@@ -48,13 +51,25 @@ impl RuleFinder for HStateCopy {
 impl<'a> RuleSeal for HStateCopyData<'a> { }
 impl<'a> Rule for HStateCopyData<'a> {
     fn simplify(self) {
-        let Self { dg, state, h } = self;
+        let Self { dg, state, h: (h, is_had) } = self;
         dg.remove_node(state).unwrap();
-        let (_, nnb) = dg.remove_node_nb(h).unwrap();
-        for nb in nnb.into_iter() {
-            if nb == h { continue; }
-            let x = dg.add_node(Node::X(Phase::pi()));
-            dg.add_wire(x, nb).unwrap();
+        if is_had {
+            let n = dg.get_node_mut(h).unwrap();
+            *n = Node::x_pi();
+        } else {
+            let (Node::H(a), nnb) = dg.remove_node_nb(h).unwrap()
+                else { unreachable!() };
+            let nnb_len = nnb.len();
+            for nb in nnb.into_iter() {
+                if nb == h {
+                    dg.scalar *= 2.0;
+                    continue;
+                }
+                let x = dg.add_node(Node::x_pi());
+                dg.add_wire(x, nb).unwrap();
+            }
+            dg.scalar *=
+                (1.0 - a) / std::f64::consts::SQRT_2.powi(nnb_len as i32);
         }
     }
 }
