@@ -1,4 +1,4 @@
-//! Tools to create and compute end product of diagrams in the ZX(H)-calculus
+//! Tools to create and compute end products of diagrams in the ZX(H)-calculus
 //! based on naive ketbra multiplication.
 //!
 //! You will most likely only want to deal directly with [`Element`] and
@@ -8,17 +8,17 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum KBError {
-    #[error("duplicate ket key in dot result: {0}")]
-    DotDuplicateKetKey(usize),
+    #[error("duplicate ket key in dot {0}")]
+    DuplicateKetKey(usize),
 
-    #[error("duplicate bra key in dot result: {0}")]
-    DotDuplicateBraKey(usize),
+    #[error("duplicate bra key in dot {0}")]
+    DuplicateBraKey(usize),
 
-    #[error("diagram: encountered a non-generator element")]
-    DiagramConversionNonGenerator,
+    #[error("encountered a non-generator element in graph conversion")]
+    GraphConvNonGenerator,
 
-    #[error("error constructing GraphViz representation: {0}")]
-    GraphVizError(String),
+    // #[error("error constructing GraphViz representation: {0}")]
+    // GraphVizError(String),
 
     #[error("I/O error: {0}")]
     IOError(#[from] std::io::Error),
@@ -35,8 +35,14 @@ pub use ketbra::*;
 pub(crate) mod element;
 pub use element::*;
 
+pub(crate) mod element2;
+pub use element2::*;
+
 pub(crate) mod diagram;
 pub use diagram::*;
+
+pub(crate) mod diagram2;
+pub use diagram2::*;
 
 pub mod circuit;
 

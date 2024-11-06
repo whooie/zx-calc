@@ -821,17 +821,10 @@ impl Diagram {
             .and_then(|mut nnb| nnb.find_map(|(id, n)| pred(id, n)))
     }
 
-    /// Create a copy of `self` with inputs and outputs swapped, the signs of
-    /// all spiders' phases flipped, and all H-boxes' arguments and the global
-    /// scalar conjugated.
-    pub fn adjoint(&self) -> Self {
-        self.clone().into_adjoint()
-    }
-
     /// Swap inputs and outputs, flip the signs of all spiders' phases, and
     /// conjugate all H-boxes' arguments as well as the global scalar, consuming
     /// `self`.
-    pub fn into_adjoint(mut self) -> Self {
+    pub fn adjoint(mut self) -> Self {
         self.adjoint_mut();
         self
     }
@@ -881,23 +874,13 @@ impl Diagram {
         shift
     }
 
-    /// Return the tensor product of `self` and `other`, copying both.
-    ///
-    /// All node IDs from `other` will be adjusted to avoid collision. The exact
-    /// size of the shift depends on how much space has been allocated for nodes
-    /// in `self` (both current and previous), and is returned alongside the
-    /// output diagram.
-    pub fn tensor(&self, other: &Self) -> (Self, usize) {
-        self.clone().into_tensor(other.clone())
-    }
-
     /// Return the tensor product of `self` and `other`, consuming both.
     ///
     /// All node IDs from `other` will be adjusted to avoid collision. The exact
     /// size of the shift depends on how much space has been allocated for nodes
     /// in `self` (both current and previous), and is returned alongside the
     /// output diagram.
-    pub fn into_tensor(mut self, other: Self) -> (Self, usize) {
+    pub fn tensor(mut self, other: Self) -> (Self, usize) {
         let shift = self.tensor_with(other);
         (self, shift)
     }
@@ -913,24 +896,6 @@ impl Diagram {
     }
 
     /// Return the composition `self ∘ other`, attempting to match the outputs
-    /// of `other` to the inputs of `self` in qubit index order, copying both
-    /// `self` and `other`.
-    ///
-    /// The IDs of all nodes from `other` will be adjusted to avoid collision.
-    /// The exact size of the shift depends on how much space has been allocated
-    /// for nodes in `self` (both current and previous), and will be returned
-    /// alongside the output diagram.
-    ///
-    /// This operation will fail if the numbers of inputs and outputs are not
-    /// equal, or if they are equal but some inputs or outputs are not free
-    /// wires. `self` will not be modified in this case.
-    ///
-    /// See also [`compose_rev`][Self::compose_rev].
-    pub fn compose(&self, other: &Self) -> GraphResult<(Self, usize)> {
-        self.clone().into_compose(other.clone())
-    }
-
-    /// Return the composition `self ∘ other`, attempting to match the outputs
     /// of `other` to the inputs of `self` in qubit index order, consuming both
     /// `self` and `other`.
     ///
@@ -943,8 +908,8 @@ impl Diagram {
     /// equal, or if they are equal but some inputs or outputs are not free
     /// wires. `self` will not be modified in this case.
     ///
-    /// See also [`into_compose_rev`][Self::into_compose_rev].
-    pub fn into_compose(mut self, other: Self) -> GraphResult<(Self, usize)> {
+    /// See also [`compose_rev`][Self::compose_rev].
+    pub fn compose(mut self, other: Self) -> GraphResult<(Self, usize)> {
         let shift = self.compose_with(other)?;
         Ok((self, shift))
     }
@@ -1012,24 +977,6 @@ impl Diagram {
     }
 
     /// Return the composition `other ∘ self`, attempting to match the outputs
-    /// of `self` to the inputs of `other` in qubit index order, copying both
-    /// `self` and `other`.
-    ///
-    /// The IDs of all nodes from `other` will be adjusted to avoid collision.
-    /// The exact size of the shift depends on how much space has been allocated
-    /// for nodes in `self` (both current and previous), and will be returned
-    /// alongside the output diagram.
-    ///
-    /// This operation will fail if the numbers of inputs and outputs are not
-    /// equal, or if they are equal but some inputs or outputs are not free
-    /// wires. `self` will not be modified in this case.
-    ///
-    /// See also [`compose`][Self::compose].
-    pub fn compose_rev(&self, other: &Self) -> GraphResult<(Self, usize)> {
-        self.clone().into_compose(other.clone())
-    }
-
-    /// Return the composition `other ∘ self`, attempting to match the outputs
     /// of `self` to the inputs of `other` in qubit index order, consuming both
     /// `self` and `other`.
     ///
@@ -1042,8 +989,8 @@ impl Diagram {
     /// equal, or if they are equal but some inputs or outputs are not free
     /// wires. `self` will not be modified in this case.
     ///
-    /// See also [`into_compose`][Self::into_compose].
-    pub fn into_compose_rev(mut self, other: Self)
+    /// See also [`compose`][Self::compose].
+    pub fn compose_rev(mut self, other: Self)
         -> GraphResult<(Self, usize)>
     {
         let shift = self.compose_with_rev(other)?;
@@ -1388,7 +1335,7 @@ impl Diagram {
     /// DOT string representation of the diagram.
     ///
     /// [dot-lang]: https://en.wikipedia.org/wiki/DOT_(graph_description_language)
-    pub fn to_graphviz(&self, name: &str) -> GraphResult<tabbycat::Graph> {
+    pub fn to_graphviz(&self) -> GraphResult<tabbycat::Graph> {
         use tabbycat::*;
         use tabbycat::attributes::*;
         use crate::vizdefs::*;
@@ -1480,30 +1427,43 @@ impl Diagram {
             let attrs = node.graph_attrs();
             statements = statements.add_node(id.into(), None, Some(attrs));
         }
+        // add the overall scalar
+        let mut a = self.scalar;
+        a.re = (1e6 * a.re).round() / 1e6;
+        a.im = (1e6 * a.im).round() / 1e6;
+        let scalar_id = self.nodes.len();
+        let attrs =
+            AttrList::new()
+            .add_pair(label(format!("{}", a)))
+            .add_pair(shape(Shape::Rectangle))
+            .add_pair(style(Style::Filled))
+            .add_pair(fillcolor(H_COLOR));
+        statements = statements.add_node(scalar_id.into(), None, Some(attrs));
         // add wires
         for (left, right) in self.wires() {
-            println!("{left} {right}");
             statements =
                 statements.add_edge(
                     Edge::head_node(left.into(), None)
                     .line_to_node(right.into(), None)
                 );
         }
-        GraphBuilder::default()
-            .graph_type(GraphType::Graph)
-            .strict(false)
-            .id(Identity::quoted(name))
-            .stmts(statements)
-            .build()
-            .map_err(GraphVizError)
+        let graphviz =
+            GraphBuilder::default()
+                .graph_type(GraphType::Graph)
+                .strict(false)
+                .id(Identity::quoted(""))
+                .stmts(statements)
+                .build()
+                .unwrap();
+        Ok(graphviz)
     }
 
     /// Like [`to_graphviz`][Self::to_graphviz], but render directly to a string
     /// and write it to `path`.
-    pub fn save_graphviz<P>(&self, name: &str, path: P) -> GraphResult<()>
+    pub fn save_graphviz<P>(&self, path: P) -> GraphResult<()>
     where P: AsRef<Path>
     {
-        let graphviz = self.to_graphviz(name)?;
+        let graphviz = self.to_graphviz()?;
         fs::OpenOptions::new()
             .write(true)
             .append(false)

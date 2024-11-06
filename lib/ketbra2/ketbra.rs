@@ -38,14 +38,15 @@ impl StateOrd for KetBra {
 
 impl KetBra {
     /// Create a new `KetBra`.
-    pub fn new<I, J>(ampl: C64, ket: I, bra: J) -> Self
+    pub fn new<C, I, J>(ampl: C, ket: I, bra: J) -> Self
     where
+        C: Into<C64>,
         I: IntoIterator<Item = (usize, State)>,
         J: IntoIterator<Item = (usize, State)>,
     {
         let ket: States = ket.into_iter().collect();
         let bra: States = bra.into_iter().collect();
-        Self { ampl, ket, bra }
+        Self { ampl: ampl.into(), ket, bra }
     }
 
     /// Return the amplitude of the ketbra.
@@ -109,7 +110,7 @@ impl KetBra {
                     .then_some(id)
             })
         {
-            return Err(DotDuplicateKetKey(rep));
+            return Err(DuplicateKetKey(rep));
         }
         // check for duplicate bras in result
         if let Some(rep) =
@@ -119,7 +120,7 @@ impl KetBra {
                     .then_some(id)
             })
         {
-            return Err(DotDuplicateBraKey(rep));
+            return Err(DuplicateBraKey(rep));
         }
 
         let mut ampl = self.ampl * rhs.ampl;
@@ -153,13 +154,13 @@ impl KetBra {
         // check for duplicate kets in result
         for (id, _) in rhs.ket.iter() {
             if self.ket.contains_key(id) && !self.bra.contains_key(id) {
-                return Err(DotDuplicateKetKey(id));
+                return Err(DuplicateKetKey(id));
             }
         }
         // check for duplicate bras in result
         for (id, _) in self.bra.iter() {
             if rhs.bra.contains_key(id) && !rhs.ket.contains_key(id) {
-                return Err(DotDuplicateBraKey(id));
+                return Err(DuplicateBraKey(id));
             }
         }
         let mut ampl = self.ampl * rhs.ampl;
@@ -216,30 +217,18 @@ impl KetBra {
 
     /// Conjugate `self`, swapping all kets and bras, and conjugating the
     /// amplitude.
-    pub fn into_adjoint(mut self) -> Self {
+    pub fn adjoint(mut self) -> Self {
         self.adjoint_mut();
         self
     }
 
-    /// Return the complex conjugate of `self`, with all kets swapped with bras,
-    /// and the amplitude conjugated.
-    pub fn adjoint(&self) -> Self {
-        let mut new = self.clone();
-        new.adjoint_mut();
-        new
-    }
-
-    /// Express `self` in `basis`, consuming `self`.
-    ///
-    /// This returns an [`Element`] because conversion to a different basis
-    /// typically introduces factors expressed as sums, resulting in the need
-    /// for multiple ket-bras in the final expression. In particular, the
-    /// returned `Element` will always be [non-atomic][Element::is_atomic].
-    pub fn into_basis(self, basis: Basis) -> Element {
+    /// Express `self` in `basis`, consuming `self` and returning the new
+    /// expansion as a raw list of terms.
+    pub fn into_basis_terms(self, basis: Basis) -> Vec<KetBra> {
         if self.ket.iter().all(|(_, s)| s.is_basis(basis))
             && self.bra.iter().all(|(_, s)| s.is_basis(basis))
         {
-            self.into()
+            vec![self]
         } else {
             let Self { ampl, ket, bra } = self;
             let ket_len = ket.len();
@@ -247,42 +236,11 @@ impl KetBra {
             let bra_bounds = bra.idx_bounds();
             let ket_iter =
                 ket.into_iter()
-                .map(|(id, s)| {
-                    if let Some(((a_up, s_up), (a_dn, s_dn))) =
-                        s.decomp(basis)
-                    {
-                        DecompIter::Two {
-                            yielded: None,
-                            item0: (id, a_up, s_up),
-                            item1: (id, a_dn, s_dn),
-                        }
-                    } else {
-                        DecompIter::One {
-                            yielded: false,
-                            item: (id, C64::from(1.0), s),
-                        }
-                    }
-                });
+                .map(|(id, s)| DecompIter::new(id, s, basis));
             let bra_iter =
                 bra.into_iter()
-                .map(|(id, s)| {
-                    if let Some(((a_up, s_up), (a_dn, s_dn))) =
-                        s.decomp(basis)
-                    {
-                        DecompIter::Two {
-                            yielded: None,
-                            item0: (id, a_up, s_up),
-                            item1: (id, a_dn, s_dn),
-                        }
-                    } else {
-                        DecompIter::One {
-                            yielded: false,
-                            item: (id, C64::from(1.0), s),
-                        }
-                    }
-                });
-            let terms =
-                ket_iter.chain(bra_iter)
+                .map(|(id, s)| DecompIter::new(id, s, basis));
+            ket_iter.chain(bra_iter)
                 .multi_cartesian_product()
                 .map(|mut states| {
                     let mut term_ampl = ampl;
@@ -296,22 +254,29 @@ impl KetBra {
                         .unwrap_or_default();
                     states.drain(..ket_len)
                         .for_each(|(id, a, s)| {
-                            println!("ket: {} {} {}", id, s, a);
                             term_ampl *= a;
                             ket.insert(id, s);
                         });
                     states.drain(..)
                         .for_each(|(id, a, s)| {
-                            println!("bra: {} {} {}", id, s, a);
                             term_ampl *= a;
                             bra.insert(id, s);
                         });
                     KetBra { ampl: term_ampl, ket, bra }
-                });
-            Element::from_terms(terms)
+                })
+                .collect()
         }
     }
 
+    /// Express `self` in `basis`, consuming `self`.
+    ///
+    /// This returns an [`Element`] because conversion to a different basis
+    /// typically introduces factors expressed as sums, resulting in the need
+    /// for multiple ket-bras in the final expression. In particular, the
+    /// returned `Element` will always be [non-atomic][Element::is_atomic].
+    pub fn into_basis(self, basis: Basis) -> Element {
+        Element::from_terms(self.into_basis_terms(basis))
+    }
 }
 
 fn subscript_str(n: usize) -> String {
@@ -359,7 +324,7 @@ impl fmt::Display for KetBra {
 
 // I just really don't want to allocate a Vec
 #[derive(Copy, Clone, Debug)]
-enum DecompIter {
+pub(crate) enum DecompIter {
     One {
         yielded: bool,
         item: (usize, C64, State),
@@ -369,6 +334,23 @@ enum DecompIter {
         item0: (usize, C64, State),
         item1: (usize, C64, State),
     },
+}
+
+impl DecompIter {
+    pub(crate) fn new(id: usize, src: State, basis: Basis) -> Self {
+        if let Some(((a_up, s_up), (a_dn, s_dn))) = src.decomp(basis) {
+            Self::Two {
+                yielded: None,
+                item0: (id, a_up, s_up),
+                item1: (id, a_dn, s_dn),
+            }
+        } else {
+            Self::One {
+                yielded: false,
+                item: (id, C64::from(1.0), src),
+            }
+        }
+    }
 }
 
 impl Iterator for DecompIter {
@@ -451,9 +433,9 @@ mod tests {
 
     #[test]
     fn scalars() {
-        let scalar = KetBra::new(C64::from(1.0), [], []);
+        let scalar = KetBra::new(1.0, [], []);
         let nonscalar =
-            KetBra::new(C64::from(1.0), [(0, State::Zero)], [(0, State::Plus)]);
+            KetBra::new(1.0, [(0, State::Zero)], [(0, State::Plus)]);
         assert!(scalar.is_scalar());
         assert!(!nonscalar.is_scalar());
         assert_eq!(scalar.as_scalar(), Some(C64::from(1.0)));
@@ -462,10 +444,10 @@ mod tests {
 
     #[test]
     fn ket() {
-        let scalar = KetBra::new(C64::from(1.0), [], []);
-        let ket = KetBra::new(C64::from(1.0), [(0, State::Zero)], []);
+        let scalar = KetBra::new(1.0, [], []);
+        let ket = KetBra::new(1.0, [(0, State::Zero)], []);
         let nonket =
-            KetBra::new(C64::from(1.0), [(0, State::Zero)], [(0, State::Plus)]);
+            KetBra::new(1.0, [(0, State::Zero)], [(0, State::Plus)]);
         assert!(!scalar.is_ket());
         assert!(ket.is_ket());
         assert!(!nonket.is_ket());
@@ -473,10 +455,10 @@ mod tests {
 
     #[test]
     fn bra() {
-        let scalar = KetBra::new(C64::from(1.0), [], []);
-        let bra = KetBra::new(C64::from(1.0), [], [(0, State::Plus)]);
+        let scalar = KetBra::new(1.0, [], []);
+        let bra = KetBra::new(1.0, [], [(0, State::Plus)]);
         let nonbra =
-            KetBra::new(C64::from(1.0), [(0, State::Zero)], [(0, State::Plus)]);
+            KetBra::new(1.0, [(0, State::Zero)], [(0, State::Plus)]);
         assert!(!scalar.is_bra());
         assert!(bra.is_bra());
         assert!(!nonbra.is_bra());
@@ -486,7 +468,7 @@ mod tests {
     fn dot() {
         let onrt2 = C64::from(std::f64::consts::FRAC_1_SQRT_2);
 
-        let s0 = KetBra::new(C64::from(1.0), [], [(0, State::Zero)]);
+        let s0 = KetBra::new(1.0, [], [(0, State::Zero)]);
         let s1 = KetBra::new(C64::i(), [(0, State::Minus)], []);
         let dot01 = s0.dot(&s1);
         let dot01_expected =
@@ -499,12 +481,12 @@ mod tests {
         assert!(dot10.is_ok());
         assert_eq!(dot10.unwrap(), dot10_expected);
 
-        let s2 = KetBra::new(C64::from(1.0), [], [(0, State::Zero)]);
-        let s3 = KetBra::new(C64::from(1.0), [], [(1, State::One)]);
-        let s4 = KetBra::new(C64::from(1.0), [], [(0, State::Plus)]);
+        let s2 = KetBra::new(1.0, [], [(0, State::Zero)]);
+        let s3 = KetBra::new(1.0, [], [(1, State::One)]);
+        let s4 = KetBra::new(1.0, [], [(0, State::Plus)]);
         let dot23 = s2.clone().into_dot(s3);
         let dot23_expected =
-            KetBra::new(C64::from(1.0), [], [(0, State::Zero), (1, State::One)]);
+            KetBra::new(1.0, [], [(0, State::Zero), (1, State::One)]);
         assert!(dot23.is_ok());
         assert_eq!(dot23.unwrap(), dot23_expected);
         assert!(s2.dot(&s4).is_err());
@@ -577,7 +559,7 @@ mod tests {
         assert_eq!(terms.len(), terms_expected.len());
         assert!(terms.iter().all(|kb| terms_expected.contains(kb)));
 
-        let s = KetBra::new(C64::from(1.0), [(0, One)], [(0, Plus)]);
+        let s = KetBra::new(1.0, [(0, One)], [(0, Plus)]);
         let elem = s.into_basis(Basis::X);
         let terms = elem.terms().unwrap();
         let terms_expected: Vec<KetBra> =

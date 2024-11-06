@@ -631,15 +631,10 @@ impl CircuitDiagram {
         todo!()
     }
 
-    /// Create a copy of `self` with inputs and outputs swapped, the signs of
-    /// all spiders' phases flipped, and all H-boxes' arguments and the global
-    /// scalar conjugated.
-    pub fn adjoint(&self) -> Self { self.clone().into_adjoint() }
-
     /// Swap inputs and outputs, flip the signs of all spiders' phases, and
     /// conjugate all H-boxes' arguments as well as the global scalar, consuming
     /// `self`.
-    pub fn into_adjoint(mut self) -> Self {
+    pub fn adjoint(mut self) -> Self {
         self.adjoint_mut();
         self
     }
@@ -667,13 +662,8 @@ impl CircuitDiagram {
         self
     }
 
-    /// Return the tensor product of `self` and `other`, copying both.
-    pub fn tensor(&self, other: &Self) -> Self {
-        self.clone().into_tensor(other.clone())
-    }
-
     /// Return the tensor product of `self` and `other`, consuming both.
-    pub fn into_tensor(mut self, other: Self) -> Self {
+    pub fn tensor(mut self, other: Self) -> Self {
         self.tensor_with(other);
         self
     }
@@ -697,25 +687,13 @@ impl CircuitDiagram {
     }
 
     /// Return the composition `self ∘ other`, attempting to match the outputs
-    /// of `other` to the inputs of `self`, copying both.
-    ///
-    /// This operation will fail if `self` and `other` contain different numbers
-    /// of qubits.
-    ///
-    /// See also [`compose_rev`][Self::compose_rev].
-    pub fn compose(&self, other: &Self) -> CircuitResult<Self> {
-        if self.n != other.n { return Err(NonMatchingIO(other.n, self.n)); }
-        self.clone().into_compose(other.clone())
-    }
-
-    /// Return the composition `self ∘ other`, attempting to match the outputs
     /// of `other` to the inputs of `self`, consuming both.
     ///
     /// This operation will fail if `self` and `other` contain different numbers
     /// of qubits.
     ///
-    /// See also [`into_compose_rev`][Self::into_compose_rev].
-    pub fn into_compose(mut self, other: Self) -> CircuitResult<Self> {
+    /// See also [`compose_rev`][Self::compose_rev].
+    pub fn compose(mut self, other: Self) -> CircuitResult<Self> {
         self.compose_with(other)?;
         Ok(self)
     }
@@ -738,25 +716,13 @@ impl CircuitDiagram {
     }
 
     /// Return the composition `other ∘ self`, attempting to match the outputs
-    /// of `self` to the inputs of `other`, copying both.
-    ///
-    /// This operation will fail if `self` and `other` contain different numbers
-    /// of qubits.
-    ///
-    /// See also [`compose`][Self::compose].
-    pub fn compose_rev(&self, other: &Self) -> CircuitResult<Self> {
-        if self.n != other.n { return Err(NonMatchingIO(self.n, other.n)); }
-        self.clone().into_compose_rev(other.clone())
-    }
-
-    /// Return the composition `other ∘ self`, attempting to match the outputs
     /// of `self` to the inputs of `other`, consuming both.
     ///
     /// This operation will fail if `self` and `other` contain sdifferent
     /// numbers of qubits.
     ///
-    /// Seee also [`into_compose`][Self::into_compose].
-    pub fn into_compose_rev(mut self, other: Self) -> CircuitResult<Self> {
+    /// Seee also [`compose`][Self::compose].
+    pub fn compose_rev(mut self, other: Self) -> CircuitResult<Self> {
         self.compose_with_rev(other)?;
         Ok(self)
     }

@@ -259,15 +259,22 @@ impl ElementData {
                 ],
                 Self::H { ket, bra, arg } => {
                     let ket_len = ket.len();
+                    let bra_len = bra.len();
+                    let had_norm =
+                        if ket_len + bra_len == 2 {
+                            std::f64::consts::FRAC_1_SQRT_2
+                        } else {
+                            1.0
+                        };
                     ket.into_iter().chain(bra)
                         .map(|id| [(id, State::Zero), (id, State::One)])
                         .multi_cartesian_product()
                         .map(|states| {
                             let ampl =
                                 if states.iter().all(|ks| ks.1 == State::One) {
-                                    arg
+                                    arg * had_norm
                                 } else {
-                                    C64::from(1.0)
+                                    C64::from(1.0) * had_norm
                                 };
                             KetBra::new(
                                 ampl,
@@ -639,13 +646,13 @@ impl ElementData {
                     if bra_l.contains(id) {
                         common.push(*id);
                     } else if ket_l.contains(id) {
-                        return Err(DotDuplicateKetKey(*id));
+                        return Err(DuplicateKetKey(*id));
                     }
                 }
                 // check for duplicate bras in result
                 for id in bra_l.iter() {
                     if !ket_r.contains(id) && bra_r.contains(id) {
-                        return Err(DotDuplicateBraKey(*id));
+                        return Err(DuplicateBraKey(*id));
                     }
                 }
                 // do the dot product
@@ -684,13 +691,13 @@ impl ElementData {
                     if bra_l.contains(id) {
                         common.push(*id);
                     } else if ket_l.contains(id) {
-                        return Err(DotDuplicateKetKey(*id));
+                        return Err(DuplicateKetKey(*id));
                     }
                 }
                 // check for duplicate bras in result
                 for id in bra_l.iter() {
                     if !ket_r.contains(id) && bra_r.contains(id) {
-                        return Err(DotDuplicateBraKey(*id));
+                        return Err(DuplicateBraKey(*id));
                     }
                 }
                 // do the dot product
@@ -848,13 +855,13 @@ impl ElementData {
                     if bra_l.contains(id) {
                         common.push(*id);
                     } else if ket_l.contains(id) {
-                        return Err(DotDuplicateKetKey(*id));
+                        return Err(DuplicateKetKey(*id));
                     }
                 }
                 // check for duplicate bras in result
                 for id in bra_l.iter() {
                     if !ket_r.contains(id) && bra_r.contains(id) {
-                        return Err(DotDuplicateBraKey(*id));
+                        return Err(DuplicateBraKey(*id));
                     }
                 }
                 // do the dot product
@@ -894,13 +901,13 @@ impl ElementData {
                     if bra_l.contains(id) {
                         common.push(*id);
                     } else if ket_l.contains(id) {
-                        return Err(DotDuplicateKetKey(*id));
+                        return Err(DuplicateKetKey(*id));
                     }
                 }
                 // check for duplicate bras in result
                 for id in bra_l.iter() {
                     if !ket_r.contains(id) && bra_r.contains(id) {
-                        return Err(DotDuplicateBraKey(*id));
+                        return Err(DuplicateBraKey(*id));
                     }
                 }
                 // do the dot product

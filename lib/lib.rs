@@ -40,6 +40,7 @@ pub mod ketbra2;
 pub mod graph;
 pub mod graph2;
 pub mod tensor;
+pub mod indexmap;
 pub(crate) mod vizdefs;
 
 /// Re-exported for use with the [`c!`] macro.

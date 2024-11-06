@@ -28,7 +28,7 @@ impl Diagram {
     /// Create a new diagram from a list of [`Element`]s.
     ///
     /// `Element`s should follow the order in which they would be drawn in a
-    /// real ZX-diagram; i.e. the referse of the order in which dot-products are
+    /// real ZX-diagram; i.e. the reverse of the order in which dot-products are
     /// taken.
     pub fn new<I>(elems: I) -> Self
     where I: IntoIterator<Item = Element>
@@ -51,13 +51,18 @@ impl Diagram {
     /// Fold over all slices of the diagram with the [dot
     /// product][Element::dot] and return the result as a single [`Element`].
     pub fn contract(self) -> KBResult<Element> {
+        fn foldfn(mb_acc: Option<Element>, elem: Element)
+            -> KBResult<Option<Element>>
+        {
+            if let Some(acc) = mb_acc {
+                acc.into_then(elem).map(Some)
+            } else {
+                Ok(Some(elem))
+            }
+        }
+
         self.elems.into_iter()
-            .try_fold(
-                None,
-                |mb, elem| {
-                    mb.map(|acc: Element| acc.into_then(elem)).transpose()
-                },
-            )
+            .try_fold(None, foldfn)
             .map(|mb_res| {
                 mb_res.unwrap_or_else(|| {
                     KetBra::new(C64::from(1.0), [], []).into()
@@ -103,6 +108,8 @@ impl Diagram {
             element.outs().into_iter()
                 .for_each(|k| { outs.push(k); });
         }
+        ins.sort_unstable();
+        outs.sort_unstable();
         (ins, outs)
     }
 
