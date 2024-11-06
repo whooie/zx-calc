@@ -35,14 +35,8 @@ pub use ketbra::*;
 pub(crate) mod element;
 pub use element::*;
 
-pub(crate) mod element2;
-pub use element2::*;
-
 pub(crate) mod diagram;
 pub use diagram::*;
-
-pub(crate) mod diagram2;
-pub use diagram2::*;
 
 pub mod circuit;
 

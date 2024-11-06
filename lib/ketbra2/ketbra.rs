@@ -4,6 +4,7 @@ use num_complex::Complex64 as C64;
 use crate::ketbra2::{
     Basis,
     Element,
+    Kind,
     KBError::*,
     KBResult,
     State,
@@ -272,10 +273,9 @@ impl KetBra {
     ///
     /// This returns an [`Element`] because conversion to a different basis
     /// typically introduces factors expressed as sums, resulting in the need
-    /// for multiple ket-bras in the final expression. In particular, the
-    /// returned `Element` will always be [non-atomic][Element::is_atomic].
+    /// for multiple ket-bras in the final expression.
     pub fn into_basis(self, basis: Basis) -> Element {
-        Element::from_terms(self.into_basis_terms(basis))
+        Element { kind: Kind::Unknown, terms: self.into_basis_terms(basis) }
     }
 }
 

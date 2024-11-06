@@ -396,8 +396,7 @@ impl Element {
     pub fn as_ketbras(&self) -> crate::ketbra2::Element {
         use crate::ketbra2 as kb;
         match self.kind {
-            Kind::Scalar(a) =>
-                kb::Element::from_terms([kb::KetBra::new(a, [], [])]),
+            Kind::Scalar(a) => kb::Element::new_scalar(a),
             Kind::Id(i) => kb::Element::z([i], [i], None),
             Kind::Z(ph) => kb::Element::z(self.ins(), self.outs(), Some(ph)),
             Kind::X(ph) => kb::Element::x(self.ins(), self.outs(), Some(ph)),
@@ -411,11 +410,11 @@ impl Element {
                 }
 
                 if let Some(a) = self.data.as_scalar() {
-                    kb::Element::from_terms([kb::KetBra::new(a, [], [])])
+                    kb::Element::new_scalar(a)
                 } else {
                     let arr = self.data.as_array().unwrap();
                     let idxs = self.data.indices().unwrap();
-                    let terms =
+                    let terms: Vec<kb::KetBra> =
                         arr.indexed_iter()
                         .map(|(ix, a)| {
                             let ix_arr = ix.as_array_view();
@@ -429,8 +428,9 @@ impl Element {
                                 .filter(|(idx, _)| idx.is_bra())
                                 .map(|(idx, ix)| (idx.wire_index(), ixstate(*ix)));
                             kb::KetBra::new(*a, kets, bras)
-                        });
-                    kb::Element::from_terms(terms)
+                        })
+                        .collect();
+                    kb::Element { kind: kb::Kind::Unknown, terms }
                 }
             },
         }
