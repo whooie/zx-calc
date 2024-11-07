@@ -1,6 +1,9 @@
 use num_complex::Complex64 as C64;
 use num_traits::One;
-use crate::{ /*ketbra,*/ phase::Phase };
+use crate::{
+    phase::Phase,
+    tensor::{ Element, ElementData },
+};
 
 /// A single node in a diagram and its data.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -246,19 +249,20 @@ impl Node {
         }
     }
 
-    // pub(crate) fn as_element<I, J>(&self, ins: I, outs: J) -> ketbra::Element
-    // where
-    //     I: IntoIterator<Item = usize>,
-    //     J: IntoIterator<Item = usize>,
-    // {
-    //     match self {
-    //         Self::Z(ph) => ketbra::Element::Z(ins, outs, Some((*ph).into())),
-    //         Self::X(ph) => ketbra::Element::X(ins, outs, Some((*ph).into())),
-    //         Self::H(a) => ketbra::Element::H(ins, outs, Some(*a)),
-    //         Self::Input => ketbra::Element::zero(),
-    //         Self::Output => ketbra::Element::zero(),
-    //     }
-    // }
+    pub(crate) fn to_element<A>(self, ins: &[usize], outs: &[usize])
+        -> Element<A>
+    where A: ElementData
+    {
+        match self {
+            Self::Z(ph) =>
+                Element::z(ins.iter().copied(), outs.iter().copied(), Some(ph)),
+            Self::X(ph) =>
+                Element::x(ins.iter().copied(), outs.iter().copied(), Some(ph)),
+            Self::H(a) =>
+                Element::h(ins.iter().copied(), outs.iter().copied(), Some(a)),
+            Self::Input | Self::Output => unreachable!()
+        }
+    }
 
     pub(crate) fn graph_attrs(&self) -> tabbycat::AttrList {
         use tabbycat::*;

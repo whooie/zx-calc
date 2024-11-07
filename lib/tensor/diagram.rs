@@ -296,7 +296,7 @@ where A: ElementData
     /// Fails if any `Element` slices cannot be written as a pure generator or
     /// if any `Element` repeats a ket index without another `Element`'s
     /// matching bra index in between.
-    pub fn as_graph(&self) -> TensorResult<crate::graph::Diagram> {
+    pub fn to_graph(&self) -> TensorResult<crate::graph::Diagram> {
         use crate::graph as graph;
         let mut graph = graph::Diagram::new();
         let mut node_id: graph::NodeId;

@@ -414,8 +414,8 @@ impl std::ops::Mul<KetBra> for f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ketbra2::Basis;
-    use crate::ketbra2::State;
+    use crate::tensor::Basis;
+    use crate::tensor::State;
 
     #[test]
     fn scalars() {
@@ -514,7 +514,7 @@ mod tests {
             [],
             [(1, State::Plus), (3, State::One)],
         );
-        let mut s1 = s0.adjoint();
+        let mut s1 = s0.clone().adjoint();
         let s1_expected = KetBra::new(
             -C64::i(),
             [(1, State::Plus), (3, State::One)],
@@ -526,15 +526,12 @@ mod tests {
     }
 
     #[test]
-    fn into_basis() {
+    fn into_basis_terms() {
         use State::*;
         let onrt2 = C64::from(std::f64::consts::FRAC_1_SQRT_2);
 
         let s = KetBra::new(C64::i(), [(0, Plus), (1, Minus)], []);
-        let elem = s.into_basis(Basis::Z);
-        let mb_terms = elem.terms();
-        assert!(mb_terms.is_some());
-        let terms = mb_terms.unwrap();
+        let terms = s.into_basis_terms(Basis::Z);
         let terms_expected: Vec<KetBra> =
             vec![
                 KetBra::new( C64::i() / 2.0, [(0, Zero), (1, Zero)], []),
@@ -546,8 +543,7 @@ mod tests {
         assert!(terms.iter().all(|kb| terms_expected.contains(kb)));
 
         let s = KetBra::new(1.0, [(0, One)], [(0, Plus)]);
-        let elem = s.into_basis(Basis::X);
-        let terms = elem.terms().unwrap();
+        let terms = s.into_basis_terms(Basis::X);
         let terms_expected: Vec<KetBra> =
             vec![
                 KetBra::new( onrt2, [(0, Plus )], [(0, Plus)]),

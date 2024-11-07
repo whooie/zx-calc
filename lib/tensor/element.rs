@@ -252,7 +252,7 @@ where A: ElementData
     ///
     /// <blockquote>
     ///   <p style="font-size:20px">
-    ///     <i>Z</i>([<i>i</i><sub>0</sub>, ..., <i>i</i><sub><i>n</i></sub>], [<i>j</i><sub>0</sub>, ..., <i>i</i><sub><i>m</i></sub>], <i>α</i>) =
+    ///     <i>Z</i>({<i>i</i><sub>0</sub>, ..., <i>i</i><sub><i>n</i></sub>}, {<i>j</i><sub>0</sub>, ..., <i>j</i><sub><i>m</i></sub>}, <i>α</i>) =
     ///       ∣0<sub><i>j</i><sub>0</sub></sub>, ..., 0<sub><i>j</i><sub><i>m</i></sub></sub>⟩⟨0<sub><i>i</i><sub>0</sub></sub>, ..., 0<sub><i>i</i><sub><i>n</i></sub></sub>∣
     ///       + <i>e</i><sup><i>iα</i></sup>
     ///         ∣1<sub><i>j</i><sub>0</sub></sub>, ..., 1<sub><i>j</i><sub><i>m</i></sub></sub>⟩⟨1<sub><i>i</i><sub>0</sub></sub>, ..., 1<sub><i>i</i><sub><i>n</i></sub></sub>∣
@@ -274,7 +274,7 @@ where A: ElementData
     ///
     /// <blockquote>
     ///   <p style="font-size:20px">
-    ///     <i>X</i>([<i>i</i><sub>0</sub>, ..., <i>i</i><sub><i>n</i></sub>], [<i>j</i><sub>0</sub>, ..., <i>i</i><sub><i>m</i></sub>], <i>α</i>) =
+    ///     <i>X</i>({<i>i</i><sub>0</sub>, ..., <i>i</i><sub><i>n</i></sub>}, {<i>j</i><sub>0</sub>, ..., <i>j</i><sub><i>m</i></sub>}, <i>α</i>) =
     ///       ∣+<sub><i>j</i><sub>0</sub></sub>, ..., +<sub><i>j</i><sub><i>m</i></sub></sub>⟩⟨+<sub><i>i</i><sub>0</sub></sub>, ..., +<sub><i>i</i><sub><i>n</i></sub></sub>∣
     ///       + <i>e</i><sup><i>iα</i></sup>
     ///         ∣–<sub><i>j</i><sub>0</sub></sub>, ..., –<sub><i>j</i><sub><i>m</i></sub></sub>⟩⟨–<sub><i>i</i><sub>0</sub></sub>, ..., –<sub><i>i</i><sub><i>n</i></sub></sub>∣
@@ -296,7 +296,7 @@ where A: ElementData
     ///
     /// <blockquote>
     ///   <p style="font-size:20px">
-    ///     <i>H</i>([<i>i</i><sub>0</sub>, ..., <i>i</i><sub><i>n</i></sub>], [<i>j</i><sub>0</sub>, ..., <i>i</i><sub><i>m</i></sub>], <i>a</i>) =
+    ///     <i>H</i>({<i>i</i><sub>0</sub>, ..., <i>i</i><sub><i>n</i></sub>}, {<i>j</i><sub>0</sub>, ..., <i>j</i><sub><i>m</i></sub>}, <i>a</i>) =
     ///       Σ<sub><i>s</i><sub><i>k</i></sub> ∊ {0, 1}</sub>
     ///         <i>a</i><sup>Π<sub><i>k</i></sub> <i>s</i><sub><i>k</i></sub></sup>
     ///           ∣<i>s</i><sub><i>j</i><sub>0</sub></sub>, ..., <i>s</i><sub><i>j</i><sub><i>m</i></sub></sub>⟩⟨<i>s</i><sub><i>i</i><sub>0</sub></sub>, ..., <i>s</i><sub><i>i</i><sub><i>n</i></sub></sub>∣
@@ -321,7 +321,7 @@ where A: ElementData
     ///
     /// <blockquote>
     ///   <p style="font-size:20px">
-    ///     SWAP(<i>i</i><sub>0</sub>, <i>i</i><sub>1</sub>) =
+    ///     swap(<i>i</i><sub>0</sub>, <i>i</i><sub>1</sub>) =
     ///       ∣0<sub><i>i</i><sub>0</sub></sub>, 0<sub><i>i</i><sub>1</sub></sub>⟩⟨0<sub><i>i</i><sub>0</sub></sub>, 0<sub><i>i</i><sub>1</sub></sub>∣
     ///       + ∣0<sub><i>i</i><sub>0</sub></sub>, 1<sub><i>i</i><sub>1</sub></sub>⟩⟨1<sub><i>i</i><sub>0</sub></sub>, 0<sub><i>i</i><sub>1</sub></sub>∣
     ///       + ∣1<sub><i>i</i><sub>0</sub></sub>, 0<sub><i>i</i><sub>1</sub></sub>⟩⟨0<sub><i>i</i><sub>0</sub></sub>, 1<sub><i>i</i><sub>1</sub></sub>∣

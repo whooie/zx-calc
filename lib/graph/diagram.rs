@@ -1,17 +1,7 @@
 use std::{ collections::VecDeque, fs, io::Write, path::Path };
 use num_complex::Complex64 as C64;
 use rustc_hash::FxHashMap;
-use crate::{
-    graph::{
-        GraphResult,
-        Node,
-        NodeData,
-        NodeId,
-        QubitId,
-        Spider,
-    },
-    // ketbra,
-};
+use crate::graph::{ GraphResult, Node, NodeData, NodeId, QubitId, Spider };
 
 use crate::graph::GraphError::*;
 
@@ -1059,162 +1049,170 @@ impl Diagram {
         Ok(shift)
     }
 
-    // // BFS explore from a given starting queue, accumulating a list of ketbra
-    // // elements
-    // fn ketbra_explore<'a>(
-    //     &'a self,
-    //     wire_nums: &WireStore,
-    //     visited: &mut Vec<NodeId>,
-    //     to_visit: &mut VecDeque<(NodeId, &'a Node)>,
-    //     elements: &mut Vec<ketbra::Element>,
-    // ) {
-    //     // upper bound on possible qubit indices
-    //     let qcount = self.inputs.len().max(self.outputs.len());
-    //     // want wire IDs line up with qubit indices when connected to
-    //     // inputs/outputs, so shift any ID that could be a qubit ID by the total
-    //     // wire count
-    //     let nonq_wire = |id: usize| -> usize {
-    //         if id < qcount { self.wire_count + id } else { id }
-    //     };
-    //     // self-loops are treated as inputs to a Bell effect, whose input wire
-    //     // IDs are shifted to come after all existing (possibly shifted) wires
-    //     let mut bell_wire = self.wire_count + qcount..;
-    //
-    //     // loop variables
-    //     let mut ins: Vec<usize>; // inputs to an element
-    //     let mut outs: Vec<usize>; // outputs from an element
-    //     let mut bell_wires: Vec<(usize, usize)> = Vec::new(); // for self-loop wires
-    //     let mut empty_wires: Vec<(QubitId, QubitId)> = Vec::new(); // direct input-to-output
-    //     while let Some((id, node)) = to_visit.pop_back() {
-    //         visited.push(id);
-    //         ins = Vec::new();
-    //         outs = Vec::new();
-    //         for (id2, node2) in self.neighbors_of(id).unwrap() {
-    //             // self-loops
-    //             if id2 == id {
-    //                 let b1 = bell_wire.next().unwrap();
-    //                 let b2 = bell_wire.next().unwrap();
-    //                 outs.push(b1);
-    //                 outs.push(b2);
-    //                 bell_wires.push((b1, b2));
-    //                 continue;
-    //             }
-    //             // empty wires
-    //             if node.is_input() && node2.is_output() {
-    //                 visited.push(id2);
-    //                 let qin = self.get_input_index(id).unwrap();
-    //                 let qout = self.get_output_index(id).unwrap();
-    //                 empty_wires.push((qin, qout));
-    //                 continue;
-    //             }
-    //             // everything else
-    //             if !visited.contains(&id2)
-    //                 && !to_visit.contains(&(id2, node2))
-    //             {
-    //                 to_visit.push_front((id2, node2));
-    //             }
-    //             if !node.is_generator() { break; }
-    //             if node2.is_input() {
-    //                 let qin = self.get_input_index(id2).unwrap();
-    //                 ins.push(qin);
-    //             } else if !node2.is_output() && visited.contains(&id2) {
-    //                 wire_nums.get(id, id2).unwrap().iter()
-    //                     .for_each(|wid| { ins.push(nonq_wire(*wid)); });
-    //             } else if node2.is_output() {
-    //                 let qout = self.get_output_index(id2).unwrap();
-    //                 outs.push(qout);
-    //             } else if !visited.contains(&id2) {
-    //                 wire_nums.get(id, id2).unwrap().iter()
-    //                     .for_each(|wid| { outs.push(nonq_wire(*wid)); });
-    //             }
-    //         }
-    //         if node.is_generator() {
-    //             elements.push(node.as_element(ins, outs));
-    //         }
-    //         if !bell_wires.is_empty() {
-    //             for (b1, b2) in bell_wires.drain(..) {
-    //                 elements.push(ketbra::Element::cap([b1, b2], None));
-    //             }
-    //         }
-    //     }
-    //     // empty wires may include swaps, which have to be dealt with
-    //     //
-    //     // individual swaps are be determined by sorting on input wire indices,
-    //     // and then finding the swaps required to sort the output wire indices
-    //     if !empty_wires.is_empty() {
-    //         empty_wires.sort_by(|(qin_l, _), (qin_r, _)| qin_l.cmp(qin_r));
-    //         let (idents_in, mut idents_out): (Vec<QubitId>, Vec<QubitId>) =
-    //             empty_wires.into_iter().unzip();
-    //         let mut swaps: Vec<ketbra::Element> = Vec::new();
-    //         let mut mb_mismatch: Option<(usize, (&QubitId, &QubitId))>;
-    //         loop {
-    //             mb_mismatch =
-    //                 idents_in.iter().zip(idents_out.iter()).enumerate()
-    //                 .find(|(_, (qin, qout))| qin != qout);
-    //             if let Some((k, (qin, qswap))) = mb_mismatch {
-    //                 let (kswap, _) =
-    //                     idents_out.iter().enumerate()
-    //                     .find(|(_, qout)| qin == *qout)
-    //                     .unwrap();
-    //                 swaps.push(ketbra::Element::swap([*qin, *qswap]));
-    //                 idents_out.swap(k, kswap);
-    //             } else {
-    //                 break;
-    //             }
-    //         }
-    //         swaps.reverse();
-    //         elements.append(&mut swaps);
-    //     }
-    // }
-    //
-    // /// Convert `self` to a [`ketbra::Diagram`] representation.
-    // pub fn as_ketbra(&self) -> ketbra::Diagram {
-    //     // assemble the ketbra diagram by iterating over nodes and analyzing
-    //     // input/output wires relative to what's already been seen
-    //     //
-    //     // have to BFS explore starting from the input nodes in order to ensure
-    //     // that input-adjencent nodes are placed first in the ketbra diagram
-    //     //
-    //     // we also want to have wire numbers in the ketbra diagram line up with
-    //     // qubit indices for convenience, so if a given wire id (normally used
-    //     // as-is for a ketbra wire index) coincides with a possible qubit index,
-    //     // shift it by the maximum wire id in the (graph) diagram
-    //     //
-    //     // do this in two steps because nodes with paths to inputs/outputs need
-    //     // to be visited in a special order, but everything else (i.e. part of a
-    //     // scalar) doesn't
-    //     //
-    //     // self-wires are dealt with by adding two extra outgoing wires
-    //     // immediately coupled to a spiderless Bell effect
-    //
-    //     // ketbra accumulator
-    //     let mut elements: Vec<ketbra::Element> =
-    //         Vec::with_capacity(self.node_count);
-    //     // have to index wires so that each one can have a unique ID in the
-    //     // ketbra diagram
-    //     let wire_nums: WireStore = self.wires().collect();
-    //
-    //     // first step: all non-scalar nodes
-    //     let mut visited: Vec<NodeId> = Vec::with_capacity(self.node_count);
-    //     // init with input nodes to make sure they're seen first
-    //     let mut to_visit: VecDeque<(NodeId, &Node)> =
-    //         self.inputs()
-    //         .map(|(_, nid)| (nid, self.get_node(nid).unwrap()))
-    //         .collect();
-    //     self.ketbra_explore(
-    //         &wire_nums, &mut visited, &mut to_visit, &mut elements);
-    //
-    //     // second step: all nodes that aren't part of a scalar
-    //     // reset `to_visit` with everything not already visited
-    //     to_visit
-    //         = self.nodes_inner()
-    //         .filter(|(id, _)| !visited.contains(id))
-    //         .collect();
-    //     self.ketbra_explore(
-    //         &wire_nums, &mut visited, &mut to_visit, &mut elements);
-    //
-    //     ketbra::Diagram::new(elements)
-    // }
+    // BFS explore from a given starting queue, accumulating a list of tensor
+    // elements
+    fn element_explore<'a, A>(
+        &'a self,
+        wire_nums: &WireStore,
+        visited: &mut Vec<NodeId>,
+        to_visit: &mut VecDeque<(NodeId, &'a Node)>,
+        elements: &mut Vec<crate::tensor::Element<A>>,
+    )
+    where A: crate::tensor::ElementData
+    {
+        use crate::tensor as tensor;
+        // upper bound on possible qubit indices
+        let qcount = self.inputs.len().max(self.outputs.len());
+        // want wire IDs line up with qubit indices when connected to
+        // inputs/outputs, so shift any ID that could be a qubit ID by the total
+        // wire count
+        let nonq_wire = |id: usize| -> usize {
+            if id < qcount { self.wire_count + id } else { id }
+        };
+        // self-loops are treated as inputs to a Bell effect, whose input wire
+        // IDs are shifted to come after all existing (possibly shifted) wires
+        let mut bell_wire = self.wire_count + qcount..;
+
+        // loop variables
+        let mut ins: Vec<usize>; // inputs to an element
+        let mut outs: Vec<usize>; // outputs from an element
+        let mut bell_wires: Vec<(usize, usize)> = Vec::new(); // for self-loop wires
+        let mut empty_wires: Vec<(QubitId, QubitId)> = Vec::new(); // direct input-to-output
+        while let Some((id, node)) = to_visit.pop_back() {
+            visited.push(id);
+            ins = Vec::new();
+            outs = Vec::new();
+            for (id2, node2) in self.neighbors_of(id).unwrap() {
+                // self-loops
+                if id2 == id {
+                    let b1 = bell_wire.next().unwrap();
+                    let b2 = bell_wire.next().unwrap();
+                    outs.push(b1);
+                    outs.push(b2);
+                    bell_wires.push((b1, b2));
+                    continue;
+                }
+                // empty wires
+                if node.is_input() && node2.is_output() {
+                    visited.push(id2);
+                    let qin = self.get_input_index(id).unwrap();
+                    let qout = self.get_output_index(id).unwrap();
+                    empty_wires.push((qin, qout));
+                    continue;
+                }
+                // everything else
+                if !visited.contains(&id2)
+                    && !to_visit.contains(&(id2, node2))
+                {
+                    to_visit.push_front((id2, node2));
+                }
+                if !node.is_generator() { break; }
+                if node2.is_input() {
+                    let qin = self.get_input_index(id2).unwrap();
+                    ins.push(qin);
+                } else if !node2.is_output() && visited.contains(&id2) {
+                    wire_nums.get(id, id2).unwrap().iter()
+                        .for_each(|wid| { ins.push(nonq_wire(*wid)); });
+                } else if node2.is_output() {
+                    let qout = self.get_output_index(id2).unwrap();
+                    outs.push(qout);
+                } else if !visited.contains(&id2) {
+                    wire_nums.get(id, id2).unwrap().iter()
+                        .for_each(|wid| { outs.push(nonq_wire(*wid)); });
+                }
+            }
+            if node.is_generator() {
+                elements.push(node.to_element(&ins, &outs));
+            }
+            if !bell_wires.is_empty() {
+                for (b1, b2) in bell_wires.drain(..) {
+                    elements.push(tensor::Element::cap(b1, b2));
+                }
+            }
+            ins.clear();
+            outs.clear();
+        }
+        // empty wires may include swaps, which have to be dealt with
+        //
+        // individual swaps are be determined by sorting on input wire indices,
+        // and then finding the swaps required to sort the output wire indices
+        if !empty_wires.is_empty() {
+            empty_wires.sort_by(|(qin_l, _), (qin_r, _)| qin_l.cmp(qin_r));
+            let (idents_in, mut idents_out): (Vec<QubitId>, Vec<QubitId>) =
+                empty_wires.into_iter().unzip();
+            let mut swaps: Vec<tensor::Element<A>> = Vec::new();
+            let mut mb_mismatch: Option<(usize, (&QubitId, &QubitId))>;
+            loop {
+                mb_mismatch =
+                    idents_in.iter().zip(idents_out.iter()).enumerate()
+                    .find(|(_, (qin, qout))| qin != qout);
+                if let Some((k, (qin, qswap))) = mb_mismatch {
+                    let (kswap, _) =
+                        idents_out.iter().enumerate()
+                        .find(|(_, qout)| qin == *qout)
+                        .unwrap();
+                    swaps.push(tensor::Element::swap(*qin, *qswap));
+                    idents_out.swap(k, kswap);
+                } else {
+                    break;
+                }
+            }
+            swaps.reverse();
+            elements.append(&mut swaps);
+        }
+    }
+
+    /// Convert `self` to a [`tensor::Diagram`][crate::tensor::Diagram]
+    /// representation.
+    pub fn to_tensor<A>(&self) -> crate::tensor::Diagram<A>
+    where A: crate::tensor::ElementData
+    {
+        use crate::tensor as tensor;
+        // assemble the tensor diagram by iterating over nodes and analyzing
+        // input/output wires relative to what's already been seen
+        //
+        // have to BFS explore starting from the input nodes in order to ensure
+        // that input-adjencent nodes are placed first in the tensor diagram
+        //
+        // we also want to have wire numbers in the tensor diagram line up with
+        // qubit indices for convenience, so if a given wire id (normally used
+        // as-is for a tensor wire index) coincides with a possible qubit index,
+        // shift it by the maximum wire id in the (graph) diagram
+        //
+        // do this in two steps because nodes with paths to inputs/outputs need
+        // to be visited in a special order, but everything else (i.e. part of a
+        // scalar) doesn't
+        //
+        // self-wires are dealt with by adding two extra outgoing wires
+        // immediately coupled to a spiderless Bell effect
+
+        // tensor accumulator
+        let mut elements: Vec<tensor::Element<A>> = Vec::new();
+        // have to index wires so that each one can have a unique ID in the
+        // tensor diagram
+        let wire_nums: WireStore = self.wires().collect();
+
+        // first step: all non-scalar nodes
+        let mut visited: Vec<NodeId> = Vec::with_capacity(self.node_count);
+        // init with input nodes to make sure they're seen first
+        let mut to_visit: VecDeque<(NodeId, &Node)> =
+            self.inputs()
+            .map(|(_, nid)| (nid, self.get_node(nid).unwrap()))
+            .collect();
+        self.element_explore(
+            &wire_nums, &mut visited, &mut to_visit, &mut elements);
+
+        // second step: all nodes that aren't part of a scalar
+        // reset `to_visit` with everything not already visited
+        to_visit
+            = self.nodes_inner()
+            .filter(|(id, _)| !visited.contains(id))
+            .collect();
+        self.element_explore(
+            &wire_nums, &mut visited, &mut to_visit, &mut elements);
+
+        tensor::Diagram::new(elements, Some(self.scalar))
+    }
 
     /// Find all nodes that are part of a scalar subgraph.
     ///
@@ -1476,8 +1474,8 @@ impl Diagram {
 
 }
 
-// helper for ketbra conversions -- this acts as a vendor for wire IDs so that,
-// when constructing a ketbra diagram, each wire can be guaranteed to have a
+// helper for tensor conversions -- this acts as a vendor for wire IDs so that,
+// when constructing a tensor diagram, each wire can be guaranteed to have a
 // unique ID
 #[derive(Clone, Debug)]
 struct WireStore(FxHashMap<(NodeId, NodeId), Vec<usize>>);
