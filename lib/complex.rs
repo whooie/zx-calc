@@ -1,9 +1,9 @@
-//! Representation of complex numbers stored as members of the ring
-//! **D**[exp(*i* *π* / 4)], where **D** is the ring of dyadic rational numbers.
+//! Complex numbers represented as members of the ring
+//! **D**[exp(*iπ*/4)], where **D** is the ring of dyadic rational numbers.
 //!
 //! All such elements can be represented using five integers
 //! (*k*, *a*, *b*, *c*, *d*), giving a complex number as
-//! (*a* + *b* *i* + *c* exp(*i* *π* / 4) + *d* exp(–*i* *π* / 4)). These are
+//! (*a* + *b* *i* + *c* exp(*iπ*/4) + *d* exp(–*iπ*/4)). These are
 //! exact representations of all possible scalars that can arise from Clifford+T
 //! quantum circuits.
 

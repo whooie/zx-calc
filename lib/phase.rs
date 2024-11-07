@@ -1,3 +1,8 @@
+//! Numerically exact, real phases backed by rational numbers.
+//!
+//! All phases and arithmetic operations thereof are automatically performed
+//! modulo 2*π*.
+
 use std::f64::consts::TAU;
 use num_complex::Complex64 as C64;
 use num_rational::Rational64 as R64;
@@ -37,7 +42,8 @@ pub(crate) fn r2f(a: R64) -> f64 { *a.numer() as f64 / *a.denom() as f64 }
 /// representing the number φ such that the phase represented by a `Phase` as a
 /// whole is 2π × φ.
 ///
-/// φ is constrained to positive values modulo 2π in all operations.
+/// Note that φ is constrained to positive values modulo 2π in all operations,
+/// which has implications for multiplication and division.
 #[derive(Copy, Clone, Debug)]
 pub struct Phase(pub R64);
 

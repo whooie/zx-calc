@@ -5,8 +5,8 @@
 //!
 //! - [`circuit`] provides constructs for ordinary descriptions of quantum
 //!   circuits using the conventional [circuit notation][qcircuits].
-//! - [`sliced`] computes diagram end products using naive tensor
-//!   multiplication, with dense and sparse backing.
+//! - [`tensor`] computes diagram end products using naive tensor
+//!   contraction, with dense and sparse backing.
 //! - [`graph`] implements the full set of rewrite rules of the ZX- and
 //!   ZH-calculus using proper graph-based implementations.
 //!
@@ -34,8 +34,8 @@
 pub mod circuit;
 pub mod phase;
 pub mod complex;
+pub mod tensor;
 pub mod graph;
-pub mod sliced;
 pub mod indexmap;
 pub(crate) mod vizdefs;
 

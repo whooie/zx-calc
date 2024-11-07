@@ -1,9 +1,8 @@
 use std::fmt;
 use itertools::Itertools;
 use num_complex::Complex64 as C64;
-// use crate::sliced::Kind;
-use super::{ Basis, KBError, KBResult, State, States, StatesIter, StateOrd };
-use KBError::*;
+use super::{ Basis, SpError, SpResult, State, States, StatesIter, StateOrd };
+use SpError::*;
 
 /// Represents a single matrix element as a ketbra with an associated
 /// amplitude.
@@ -98,7 +97,7 @@ impl KetBra {
     /// Unmatched kets and bras are left untouched and "passed through" the
     /// product. Fails if an unmatched ket or bra leaves multiple states on a
     /// single index.
-    pub fn dot(&self, rhs: &Self) -> KBResult<Self> {
+    pub fn dot(&self, rhs: &Self) -> SpResult<Self> {
         // check for duplicate kets in result
         if let Some(rep) =
             rhs.ket.iter()
@@ -147,7 +146,7 @@ impl KetBra {
     /// Unmatched kets and bras are left untouched and "passed through" the
     /// product. Fails if an unmatched ket or bra leaves multiple states on a
     /// single index.
-    pub fn into_dot(self, rhs: Self) -> KBResult<Self> {
+    pub fn into_dot(self, rhs: Self) -> SpResult<Self> {
         // check for duplicate kets in result
         for (id, _) in rhs.ket.iter() {
             if self.ket.contains_key(id) && !self.bra.contains_key(id) {

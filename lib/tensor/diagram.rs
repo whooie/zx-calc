@@ -2,17 +2,17 @@ use std::io::Write;
 use num_complex::Complex64 as C64;
 use crate::{
     indexmap::IndexMap,
-    sliced::{
+    tensor::{
         Element,
         ElementData,
         Kind,
-        SlicedError,
-        SlicedResult,
+        TensorError,
+        TensorResult,
         dense::De,
         sparse::Sp,
     },
 };
-use SlicedError::*;
+use TensorError::*;
 
 /// Represents a series of [`Element`]s as "slices" of a ZX(H)-diagram.
 ///
@@ -296,7 +296,7 @@ where A: ElementData
     /// Fails if any `Element` slices cannot be written as a pure generator or
     /// if any `Element` repeats a ket index without another `Element`'s
     /// matching bra index in between.
-    pub fn as_graph(&self) -> SlicedResult<crate::graph::Diagram> {
+    pub fn as_graph(&self) -> TensorResult<crate::graph::Diagram> {
         use crate::graph as graph;
         let mut graph = graph::Diagram::new();
         let mut node_id: graph::NodeId;
@@ -387,7 +387,7 @@ where A: ElementData
     /// is an index corresponding to its position in `self`.
     ///
     /// [dot-lang]: https://en.wikipedia.org/wiki/DOT_(graph_description_language)
-    pub fn to_graphviz(&self) -> SlicedResult<tabbycat::Graph> {
+    pub fn to_graphviz(&self) -> TensorResult<tabbycat::Graph> {
         use tabbycat::*;
         use tabbycat::attributes::*;
         use crate::vizdefs::*;
@@ -641,7 +641,7 @@ where A: ElementData
 
     /// Like [`to_graphviz`][Self::to_graphviz], but render directly to a string
     /// and write it to `path`.
-    pub fn save_graphviz<P>(&self, path: P) -> SlicedResult<()>
+    pub fn save_graphviz<P>(&self, path: P) -> TensorResult<()>
     where P: AsRef<std::path::Path>
     {
         let graphviz = self.to_graphviz()?;

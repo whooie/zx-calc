@@ -1,9 +1,9 @@
 use std::fmt;
 use ndarray::{ self as nd, Dimension };
 use num_complex::Complex64 as C64;
-use super::{ TensorError, TensorResult };
+use super::{ DeError, DeResult };
 
-use TensorError::*;
+use DeError::*;
 
 /// An index for a qubit wire on a specific side of a ket-bra.
 ///
@@ -190,7 +190,7 @@ impl TensorData {
     fn new_scalar(val: C64) -> Self { Self::Scalar(val) }
 
     fn from_array<I, S, D>(indices: I, array: nd::ArrayBase<S, D>)
-        -> TensorResult<Self>
+        -> DeResult<Self>
     where
         I: IntoIterator<Item = Q>,
         S: nd::DataOwned<Elem = C64>,
@@ -500,7 +500,7 @@ impl TensorData {
         }
     }
 
-    fn contract(self, rhs: Self) -> TensorResult<Self> {
+    fn contract(self, rhs: Self) -> DeResult<Self> {
         match (self, rhs) {
             (Self::Scalar(a), Self::Scalar(b)) => Ok(Self::Scalar(a * b)),
             (Self::Scalar(a), Self::Tensor(idxs, mut b)) => {
@@ -743,7 +743,7 @@ impl Tensor {
     /// one-dimensional with length 2<sup><i>n</i></sup>, where *n* is the
     /// number of indices.
     pub fn from_array<I, S, D>(indices: I, array: nd::ArrayBase<S, D>)
-        -> TensorResult<Self>
+        -> DeResult<Self>
     where
         I: IntoIterator<Item = Q>,
         S: nd::DataOwned<Elem = C64>,
@@ -875,7 +875,7 @@ impl Tensor {
     /// non-common indices belonging to `self` and `rhs`. All indices originally
     /// belonging to `self` are placed before those from `rhs`, but the ordering
     /// of indices within these groups is not preserved.
-    pub fn contract(self, rhs: Self) -> TensorResult<Self> {
+    pub fn contract(self, rhs: Self) -> DeResult<Self> {
         self.0.contract(rhs.0).map(Self::from)
     }
 

@@ -8,14 +8,14 @@ use crate::phase::Phase;
 use super::{ ElementDataSeal, ElementData };
 
 #[derive(Debug, Error)]
-pub enum KBError {
+pub enum SpError {
     #[error("duplicate ket key in dot {0}")]
     DuplicateKetKey(usize),
 
     #[error("duplicate bra key in dot {0}")]
     DuplicateBraKey(usize),
 }
-pub type KBResult<T> = Result<T, KBError>;
+pub type SpResult<T> = Result<T, SpError>;
 
 pub(crate) mod state;
 pub use state::*;
@@ -40,7 +40,7 @@ impl From<C64> for Sp {
 
 impl ElementDataSeal for Sp { }
 impl ElementData for Sp {
-    type Error = KBError;
+    type Error = SpError;
     type InputIter<'a> = BraIndices<'a>;
     type OutputIter<'a> = KetIndices<'a>;
 
@@ -286,7 +286,7 @@ impl ElementData for Sp {
             self.0.into_iter()
             .cartesian_product(rhs.0)
             .map(|(l, r)| l.into_dot(r))
-            .collect::<KBResult<_>>()?;
+            .collect::<SpResult<_>>()?;
         if terms.first().is_some_and(|kb| kb.is_scalar()) {
             let a: C64 = terms.drain(..).map(|kb| kb.ampl).sum();
             terms.push(KetBra::new(a, [], []));

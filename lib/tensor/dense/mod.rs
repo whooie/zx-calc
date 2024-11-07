@@ -7,7 +7,7 @@ use crate::phase::Phase;
 use super::{ ElementDataSeal, ElementData };
 
 #[derive(Debug, Error)]
-pub enum TensorError {
+pub enum DeError {
     #[error("duplicate index {0:?}")]
     DuplicateIndex(Q),
 
@@ -17,7 +17,7 @@ pub enum TensorError {
     #[error("un-matched duplicate index in contraction {0:?}")]
     ContractDuplicateIndex(Q),
 }
-pub type TensorResult<T> = Result<T, TensorError>;
+pub type DeResult<T> = Result<T, DeError>;
 
 pub(crate) mod tensor;
 pub use tensor::*;
@@ -36,7 +36,7 @@ impl From<C64> for De {
 
 impl ElementDataSeal for De { }
 impl ElementData for De {
-    type Error = TensorError;
+    type Error = DeError;
     type InputIter<'a> = BraIndices<'a>;
     type OutputIter<'a> = KetIndices<'a>;
 
