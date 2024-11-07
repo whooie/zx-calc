@@ -18,7 +18,7 @@
 //!
 //! TODO
 
-use crate::graph2::{ NodeId, Diagram, node::Node };
+use crate::graph::{ NodeId, Diagram, node::Node };
 
 pub(crate) fn fst<T, U>(pair: (T, U)) -> T { pair.0 }
 

@@ -290,14 +290,14 @@ where A: ElementData
             })
     }
 
-    /// Convert `self` to a [`graph::Diagram`][crate::graph2::Diagram]
+    /// Convert `self` to a [`graph::Diagram`][crate::graph::Diagram]
     /// representation.
     ///
     /// Fails if any `Element` slices cannot be written as a pure generator or
     /// if any `Element` repeats a ket index without another `Element`'s
     /// matching bra index in between.
-    pub fn as_graph(&self) -> SlicedResult<crate::graph2::Diagram> {
-        use crate::graph2 as graph;
+    pub fn as_graph(&self) -> SlicedResult<crate::graph::Diagram> {
+        use crate::graph as graph;
         let mut graph = graph::Diagram::new();
         let mut node_id: graph::NodeId;
         let (inputs, outputs) = self.ins_outs();

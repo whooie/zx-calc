@@ -6,7 +6,7 @@
 
 use thiserror::Error;
 use crate::{
-    graph2::{ Diagram, Node, NodeId, QubitId },
+    graph::{ Diagram, Node, NodeId, QubitId },
     phase::Phase,
 };
 
@@ -22,7 +22,7 @@ pub enum CircuitError {
     NonMatchingIO(usize, usize),
 
     #[error("diagram error: {0}")]
-    GraphError(#[from] crate::graph2::GraphError),
+    GraphError(#[from] crate::graph::GraphError),
 }
 pub type CircuitResult<T> = Result<T, CircuitError>;
 #[allow(unused_imports)]
@@ -775,7 +775,7 @@ impl CircuitDiagram {
 /// # Example
 /// The usage
 /// ```
-/// # use zx_calc::graph2::circuit::*;
+/// # use zx_calc::graph::circuit::*;
 /// use zx_calc::circuit_diagram;
 ///
 /// let outcome_a = State::Zero;
@@ -801,7 +801,7 @@ impl CircuitDiagram {
 /// ```
 /// is equivalent to
 /// ```
-/// # use zx_calc::graph2::circuit::*;
+/// # use zx_calc::graph::circuit::*;
 /// let outcome_a = State::Zero;
 /// let outcome_b = State::One;
 ///
@@ -829,7 +829,7 @@ macro_rules! circuit_diagram {
         ops: { $( $op:expr );* $(;)? } $(,)?
     ) => {
         {
-            let mut diagram = $crate::graph2::circuit::CircuitDiagram::new($n);
+            let mut diagram = $crate::graph::circuit::CircuitDiagram::new($n);
             $( diagram.set_input($qubit, $state); )*
             $( diagram.apply_op($op); )*
             diagram
