@@ -37,9 +37,10 @@ pub mod phase;
 pub mod complex;
 pub mod ketbra;
 pub mod ketbra2;
+pub mod tensor;
 pub mod graph;
 pub mod graph2;
-pub mod tensor;
+pub mod sliced;
 pub mod indexmap;
 pub(crate) mod vizdefs;
 

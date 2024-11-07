@@ -133,13 +133,13 @@ impl Diagram {
         (ins, outs)
     }
 
-    // /// Convert `self` to a [`tensor::Diagram`][crate::tensor::Diagram]
-    // /// representation.
-    // pub fn as_tensor(&self) -> crate::tensor::Diagram {
-    //     crate::tensor::Diagram::new(
-    //         self.elems.iter().map(|elem| elem.as_tensor())
-    //     ).with_scalar(self.scalar)
-    // }
+    /// Convert `self` to a [`tensor::Diagram`][crate::tensor::Diagram]
+    /// representation.
+    pub fn as_tensor(&self) -> crate::tensor::Diagram {
+        crate::tensor::Diagram::from_elems(
+            self.elems.iter().map(|elem| elem.as_tensor())
+        ).with_scalar(self.scalar)
+    }
 
     /// Convert `self` to a [`graph::Diagram`][crate::graph2::Diagram]
     /// representation.

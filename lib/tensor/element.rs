@@ -345,7 +345,7 @@ impl Element {
     /// Multiply by a scalar, modifying `self` in place.
     pub fn scalar_mul_mut(&mut self, scalar: C64) {
         const EPSILON: f64 = 1e-12;
-        if (scalar + 1.0).norm() < EPSILON { return; }
+        if (scalar - 1.0).norm() < EPSILON { return; }
         self.data.scalar_mul_inplace(scalar);
         self.kind = Kind::Unknown;
     }
