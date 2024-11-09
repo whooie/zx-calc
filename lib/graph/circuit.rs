@@ -1,7 +1,7 @@
 //! Alternative interface to [`Diagram`] from a circuit-based context.
 //!
 //! The default gate set is defined via [`Gate`], but can be extended using the
-//! [`GateDiagram`] trait. See [`circuit_diagram!`][crate::circuit_diagram] for
+//! [`GateDiagram`] trait. See [`graph_circuit!`][crate::graph_circuit] for
 //! example usage and abbreviated syntax.
 
 use thiserror::Error;
@@ -105,11 +105,6 @@ impl Gate {
     /// Return `true` if `self` is `Toff`.
     pub fn is_toff(&self) -> bool { matches!(self, Self::Toff(..)) }
 
-    /// Create a new X-rotation gate on qubit `k` with phase `(a / b) × 2π`.
-    pub fn new_xrot(k: usize, a: i64, b: i64) -> Self {
-        Self::XRot(k, Phase::new(a, b))
-    }
-
     /// Create a new X-rotation gate on qubit `k` with π phase.
     pub fn xrot_pi(k: usize) -> Self { Self::XRot(k, Phase::pi()) }
 
@@ -122,12 +117,9 @@ impl Gate {
     /// Create a new X-rotation gate on qubit `k` with π/8 phase.
     pub fn xrot_pi8(k: usize) -> Self { Self::XRot(k, Phase::pi8()) }
 
-    /// Create a new X-rotation gate on qubit `k` with phase `2π / n`.
-    pub fn xrot_frac(k: usize, n: i64) -> Self { Self::XRot(k, Phase::frac(n)) }
-
-    /// Create a new Z-rotation gate on qubit `k` with phase `(a / b) × 2π`.
-    pub fn new_zrot(k: usize, a: i64, b: i64) -> Self {
-        Self::ZRot(k, Phase::new(a, b))
+    /// Create a new X-rotation gate on qubit `k` with phase `(a / b) × 2π`.
+    pub fn xrot_frac(k: usize, a: i64, b: i64) -> Self {
+        Self::XRot(k, Phase::new(a, b))
     }
 
     /// Create a new Z-rotation gate on qubit `k` with π phase.
@@ -142,13 +134,9 @@ impl Gate {
     /// Create a new Z-rotation gate on qubit `k` with π/8 phase.
     pub fn zrot_pi8(k: usize) -> Self { Self::ZRot(k, Phase::pi8()) }
 
-    /// Create a new Z-rotation gate on qubit `k` with phase `2π / n`.
-    pub fn zrot_frac(k: usize, n: i64) -> Self { Self::ZRot(k, Phase::frac(n)) }
-
-    /// Create a new CX-rotation gate on qubit `t`, controlled by qubit `c`,
-    /// with phase `(a / b) × 2π`.
-    pub fn new_cxrot(c: usize, t: usize, a: i64, b: i64) -> Self {
-        Self::CXRot(c, t, Phase::new(a, b))
+    /// Create a new Z-rotation gate on qubit `k` with phase `(a / b) × 2π`.
+    pub fn zrot_frac(k: usize, a: i64, b: i64) -> Self {
+        Self::ZRot(k, Phase::new(a, b))
     }
 
     /// Create a new CX-rotation gate on qubit `t`, controlled by qubit `c`,
@@ -175,15 +163,9 @@ impl Gate {
     }
 
     /// Create a new CX-rotation gate on qubit `t`, controlled by qubit `c`,
-    /// with phase `2π / n`.
-    pub fn cxrot_frac(c: usize, t: usize, n: i64) -> Self {
-        Self::CXRot(c, t, Phase::frac(n))
-    }
-
-    /// Create a new CZ-rotation gate on qubit `t`, controlled by qubit `c`,
     /// with phase `(a / b) × 2π`.
-    pub fn new_czrot(c: usize, t: usize, a: i64, b: i64) -> Self {
-        Self::CZRot(c, t, Phase::new(a, b))
+    pub fn cxrot_frac(c: usize, t: usize, a: i64, b: i64) -> Self {
+        Self::CXRot(c, t, Phase::new(a, b))
     }
 
     /// Create a new CZ-rotation gate on qubit `t`, controlled by qubit `c`,
@@ -210,9 +192,9 @@ impl Gate {
     }
 
     /// Create a new CZ-rotation gate on qubit `t`, controlled by qubit `c`,
-    /// with phase `2π / n`.
-    pub fn czrot_frac(c: usize, t: usize, n: i64) -> Self {
-        Self::CZRot(c, t, Phase::frac(n))
+    /// with phase `(a / b) × 2π`.
+    pub fn czrot_frac(c: usize, t: usize, a: i64, b: i64) -> Self {
+        Self::CZRot(c, t, Phase::new(a, b))
     }
 
     /// Return `true` if `other` is the inverse of `self`.
@@ -758,7 +740,8 @@ impl CircuitDiagram {
 
 }
 
-/// Create a [`CircuitDiagram`] using abbreviated syntax.
+/// Create a [graph-based circuit diagram][CircuitDiagram] using abbreviated
+/// syntax.
 ///
 /// The first argument defines the number of qubits in the circuit, and the
 /// input states for any or all of them are defined in the following block.
@@ -776,12 +759,12 @@ impl CircuitDiagram {
 /// The usage
 /// ```
 /// # use zx_calc::graph::circuit::*;
-/// use zx_calc::circuit_diagram;
+/// use zx_calc::graph_circuit;
 ///
 /// let outcome_a = State::Zero;
 /// let outcome_b = State::One;
 ///
-/// circuit_diagram!(
+/// graph_circuit!(
 ///     qubits: 3,
 ///     inputs: { 1 => State::Zero, 2 => State::Zero },
 ///     ops: {
@@ -822,7 +805,7 @@ impl CircuitDiagram {
 /// diagram.apply_op(if outcome_a == State::One { Gate::Z(2) } else { Gate::I });
 /// ```
 #[macro_export]
-macro_rules! circuit_diagram {
+macro_rules! graph_circuit {
     (
         qubits: $n:expr,
         inputs: { $( $qubit:expr => $state:expr ),* $(,)? },
@@ -837,5 +820,5 @@ macro_rules! circuit_diagram {
     }
 }
 
-pub use crate::circuit_diagram;
+pub use crate::graph_circuit;
 

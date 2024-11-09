@@ -109,6 +109,15 @@ impl Q {
     pub fn same_wire(&self, other: &Self) -> bool {
         self.wire_index() == other.wire_index()
     }
+
+    pub(crate) fn map_index<F>(&mut self, map: F)
+    where F: FnOnce(usize) -> usize
+    {
+        match self {
+            Self::Ket(k) => { *k = map(*k); },
+            Self::Bra(k) => { *k = map(*k); },
+        }
+    }
 }
 
 impl PartialOrd for Q {

@@ -268,6 +268,46 @@ where A: ElementData
         None
     }
 
+    /// Reverse the order of elements, conjugating each one as well as the
+    /// global scalar.
+    pub fn adjoint_mut(&mut self) {
+        self.scalar = self.scalar.conj();
+        self.elems.reverse();
+        self.elems.iter_mut()
+            .for_each(|elem| { elem.adjoint_mut(); });
+    }
+
+    /// Return the adjoint of `self` with conjugated global scalar, and reversed
+    /// and conjugated elements.
+    pub fn adjoint(mut self) -> Self {
+        self.adjoint_mut();
+        self
+    }
+
+    /// Return the tensor product `self ⊗ other`, consuming both.
+    ///
+    /// All wire indices from `other` will be shifted to avoid collision. The
+    /// exact size of the shift depends on the maximum wire index value
+    /// currently in `self`. After shifting, all elements from `other` are
+    /// appended to the end of `self` and global scalars are multiplied.
+    pub fn tensor(mut self, mut other: Self) -> Self {
+        let shift: usize =
+            self.elems.iter()
+            .map(|elem| {
+                elem.input_iter().chain(elem.output_iter())
+                    .max()
+                    .map(|m| m + 1)
+                    .unwrap_or(0)
+            })
+            .max()
+            .unwrap_or(0);
+        other.elems.iter_mut()
+            .for_each(|elem| { elem.shift_indices(shift); });
+        self.elems.append(&mut other.elems);
+        self.scalar *= other.scalar;
+        self
+    }
+
     /// Fold over all elements of the diagram with the [dot
     /// product][Element::dot] and return the result as a single [`Element`].
     pub fn contract(self) -> Result<Element<A>, A::Error> {
@@ -411,7 +451,8 @@ where A: ElementData
         let (inputs, outputs) = self.ins_outs();
         let mut wires: IndexMap<usize> = IndexMap::new(); // wire idx -> node id
 
-        // ensure all inputs are in a subgraph at the same rank
+        // ensure all inputs are in a subgraph at the same rank, attaching the
+        // overall scalar at the bottom
         let mut inputs_subgraph_stmt =
             StmtList::new()
             .add_attr(
@@ -448,6 +489,34 @@ where A: ElementData
             }
             prev = Some(node_id);
         }
+
+        // add the overall scalar
+        let mut a = self.scalar;
+        a.re = (1e6 * a.re).round() / 1e6;
+        a.im = (1e6 * a.im).round() / 1e6;
+        node_id = id_gen.next().unwrap();
+        let attrs =
+            AttrList::new()
+            .add_pair(label(format!("{}", a)))
+            .add_pair(shape(Shape::Rectangle))
+            .add_pair(style(Style::Filled))
+            .add_pair(fillcolor(H_COLOR));
+        inputs_subgraph_stmt =
+            inputs_subgraph_stmt.add_node(node_id.into(), None, Some(attrs));
+        if let Some(prev_idx) = prev {
+            inputs_subgraph_stmt =
+                inputs_subgraph_stmt.add_edge(
+                    Edge::head_node(
+                        prev_idx.into(),
+                        Some(Port::compass(Compass::South)),
+                    )
+                    .line_to_node(
+                        node_id.into(),
+                        Some(Port::compass(Compass::North)),
+                    )
+                    .add_attrpair(style(Style::Invisible))
+                );
+        }
         statements =
             statements.add_subgraph(SubGraph::cluster(inputs_subgraph_stmt));
 
@@ -455,56 +524,51 @@ where A: ElementData
         let mut u_idx = 0..;
         for elem in self.elems.iter() {
             match elem.kind {
-                Kind::Z(_)
-                | Kind::X(_)
-                | Kind::H(_)
-                | Kind::Unknown
-                => {
+                e if e.is_z() || e.is_x() || e.is_h() || e.is_unknown() => {
                     node_id = id_gen.next().unwrap();
-                    let attrs =
-                        match elem.kind {
-                            Kind::Z(ph) => {
-                                AttrList::new()
-                                    .add_pair(label(ph.label()))
-                                    .add_pair(shape(Shape::Circle))
-                                    .add_pair(height(CIRCLE_HEIGHT))
-                                    .add_pair(style(Style::Filled))
-                                    .add_pair(fillcolor(Z_COLOR))
-                            },
-                            Kind::X(ph) => {
-                                AttrList::new()
-                                    .add_pair(label(ph.label()))
-                                    .add_pair(shape(Shape::Circle))
-                                    .add_pair(height(CIRCLE_HEIGHT))
-                                    .add_pair(style(Style::Filled))
-                                    .add_pair(fillcolor(X_COLOR))
-                            },
-                            Kind::H(a) => {
-                                let a_label =
-                                    if (a + 1.0).norm() < 1e-12 {
-                                        "".to_string()
-                                    } else {
-                                        format!("{}", a)
-                                    };
-                                AttrList::new()
-                                    .add_pair(label(a_label))
-                                    .add_pair(shape(Shape::Square))
-                                    .add_pair(height(SQUARE_HEIGHT))
-                                    .add_pair(style(Style::Filled))
-                                    .add_pair(fillcolor(H_COLOR))
-                            },
-                            Kind::Unknown => {
-                                let u_label =
-                                    format!("U{}",
-                                        subscript_str(u_idx.next().unwrap()));
-                                AttrList::new()
-                                    .add_pair(label(u_label))
-                                    .add_pair(shape(Shape::Rectangle))
-                                    .add_pair(style(Style::Filled))
-                                    .add_pair(fillcolor(Color::White))
-                            },
-                            _ => unreachable!(),
-                        };
+                    let attrs: AttrList = match elem.kind {
+                        Kind::Z(ph) => {
+                            AttrList::new()
+                                .add_pair(label(ph.label()))
+                                .add_pair(shape(Shape::Circle))
+                                .add_pair(height(CIRCLE_HEIGHT))
+                                .add_pair(style(Style::Filled))
+                                .add_pair(fillcolor(Z_COLOR))
+                        },
+                        Kind::X(ph) => {
+                            AttrList::new()
+                                .add_pair(label(ph.label()))
+                                .add_pair(shape(Shape::Circle))
+                                .add_pair(height(CIRCLE_HEIGHT))
+                                .add_pair(style(Style::Filled))
+                                .add_pair(fillcolor(X_COLOR))
+                        },
+                        Kind::H(a) => {
+                            let a_label =
+                                if (a + 1.0).norm() < 1e-12 {
+                                    "".to_string()
+                                } else {
+                                    format!("{}", a)
+                                };
+                            AttrList::new()
+                                .add_pair(label(a_label))
+                                .add_pair(shape(Shape::Square))
+                                .add_pair(height(SQUARE_HEIGHT))
+                                .add_pair(style(Style::Filled))
+                                .add_pair(fillcolor(H_COLOR))
+                        },
+                        Kind::Unknown => {
+                            let u_label =
+                                format!("U{}",
+                                    subscript_str(u_idx.next().unwrap()));
+                            AttrList::new()
+                                .add_pair(label(u_label))
+                                .add_pair(shape(Shape::Rectangle))
+                                .add_pair(style(Style::Filled))
+                                .add_pair(fillcolor(Color::White))
+                        },
+                        _ => unreachable!(),
+                    };
                     statements =
                         statements.add_node(node_id.into(), None, Some(attrs));
                     for in_wire in elem.input_iter() {
@@ -566,22 +630,9 @@ where A: ElementData
                         );
                 },
                 Kind::Id(_) => { },
+                _ => unreachable!(),
             }
         }
-
-        // add the overall scalar
-        let mut a = self.scalar;
-        a.re = (1e6 * a.re).round() / 1e6;
-        a.im = (1e6 * a.im).round() / 1e6;
-        node_id = id_gen.next().unwrap();
-        let attrs =
-            AttrList::new()
-            .add_pair(label(format!("{}", a)))
-            .add_pair(shape(Shape::Rectangle))
-            .add_pair(style(Style::Filled))
-            .add_pair(fillcolor(H_COLOR));
-        statements =
-            statements.add_node(node_id.into(), None, Some(attrs));
 
         // ensure all outputs are in a subgraph at the same rank
         let mut outputs_subgraph_stmt =
@@ -738,4 +789,70 @@ fn subscript_str(n: usize) -> String {
         .replace('8', "₈")
         .replace('9', "₉")
 }
+
+/// Create a [tensor-based diagram][Diagram] using an abbreviated syntax.
+///
+/// The first item in angle brackets is the storage type for the diagram's
+/// tensors, e.g. [`De`] or [`Sp`]. Everything that follows defines elements
+/// in the diagram with the syntax
+/// ```text
+/// <element_type> ( args... )
+/// ```
+/// where `<element_type>` is a constructor method of [`Element`], and `args...`
+/// is any arguments to be passed to it. Note that `args...` may be left empty.
+///
+/// This macro returns a single value of type `Diagram`.
+///
+/// The normal usage
+/// ```
+/// # use zx_calc::tensor::*;
+/// let mut diagram = Diagram::<De>::empty();
+///
+/// diagram.push(Element::cup(1, 2));
+/// diagram.push(Element::z_0([0], [0, 3]));
+/// diagram.push(Element::x_0([1, 3], [1]));
+/// diagram.push(Element::had(0));
+/// diagram.push(Element::x_0([0], []));
+/// diagram.push(Element::x_pi([1], []));
+/// diagram.push(Element::x_pi([2], [2]));
+/// diagram.push(Element::z_0([2], [2]));
+/// ```
+/// constructs the same diagram as
+/// ```
+/// # use zx_calc::tensor::*;
+/// use zx_calc::tensor_diagram;
+///
+/// tensor_diagram!(
+///     <De> {
+///         cup (1, 2),
+///         z_0 ([0], [0, 3]),
+///         x_0 ([1, 3], [1]),
+///         had (0),
+///         x_0 ([0], []),
+///         x_pi ([1], []),
+///         x_pi ([2], [2]),
+///         z_0 ([2], [2]),
+///     }
+/// );
+/// ```
+#[macro_export]
+macro_rules! tensor_diagram {
+    (
+        <$storage:ty> {
+            $( $element_type:ident ( $( $arg:expr ),* $(,)? ) ),* $(,)?
+        } $(,)?
+    ) => {
+        {
+            let mut diagram = $crate::tensor::Diagram::<$storage>::empty();
+            $(
+            diagram.push(
+                $crate::tensor::Element::<$storage>::$element_type($( $arg ),*)
+            );
+            )*
+            diagram
+        }
+    }
+}
+
+pub use crate::tensor_diagram;
 

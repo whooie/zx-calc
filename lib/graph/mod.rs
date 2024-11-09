@@ -2,8 +2,9 @@
 //! ZX(H)-calculus.
 //!
 //! Diagrams are represented as an undirected, unweighted graph with parallel
-//! edges and data attached to its nodes. See [`diagram!`][crate::diagram] for
-//! example usage and abbreviated syntax.
+//! edges and data attached to its nodes. See
+//! [`graph_diagram!`][crate::graph_diagram] for example usage and abbreviated
+//! syntax.
 
 use thiserror::Error;
 

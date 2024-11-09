@@ -40,6 +40,15 @@ impl ElementData for De {
     type InputIter<'a> = BraIndices<'a>;
     type OutputIter<'a> = KetIndices<'a>;
 
+    fn shift_indices(&mut self, sh: usize) {
+        unsafe {
+            if let Some(indices) = self.0.indices_mut() {
+                indices.iter_mut()
+                    .for_each(|idx| idx.map_index(|k| k + sh));
+            }
+        }
+    }
+
     fn input_iter(&self) -> BraIndices<'_> { self.0.bra_indices() }
 
     fn output_iter(&self) -> KetIndices<'_> { self.0.ket_indices() }

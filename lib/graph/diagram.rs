@@ -11,6 +11,122 @@ fn snd<T, U>(pair: (T, U)) -> U { pair.1 }
 
 fn rev<T, U>(pair: (T, U)) -> (U, T) { (pair.1, pair.0) }
 
+/// The ID associated with a particular input/output node of a diagram.
+///
+/// An `IONodeId` can be either `Free`, where the node itself is properly an
+/// [`Input`][Node::Input] or [`Output`][Node::Output] to the diagram, or a
+/// `State`, where a unary spider has been assigned to a previously free
+/// input/output using [`Diagram::apply_state`] or [`Diagram::apply_bell`] (or
+/// other variants of those methods).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum IONodeId {
+    /// A proper free input/output to a diagram.
+    Free(NodeId),
+    /// A previously free input/output that now has a specified state.
+    State(NodeId),
+}
+
+impl IONodeId {
+    /// Return `true` if `self` is `Free`.
+    pub fn is_free(&self) -> bool { matches!(self, Self::Free(_)) }
+
+    /// Return `true` if `self` is `Free` and the underlying node ID satisfies
+    /// some predicate.
+    pub fn is_free_and<F>(&self, pred: F) -> bool
+    where F: FnOnce(NodeId) -> bool
+    {
+        match self {
+            Self::Free(id) => pred(*id),
+            Self::State(_) => false,
+        }
+    }
+
+    pub(crate) fn make_free(&mut self) {
+        match self {
+            Self::Free(_) => { },
+            Self::State(id) => { *self = Self::Free(*id); },
+        }
+    }
+
+    /// Return `true` if `self` is `State`.
+    pub fn is_state(&self) -> bool { matches!(self, Self::State(_)) }
+
+    /// Return `true` if `self` is `State` and the underlying node ID satisfies
+    /// some predicate.
+    pub fn is_state_and<F>(&self, pred: F) -> bool
+    where F: FnOnce(NodeId) -> bool
+    {
+        match self {
+            Self::Free(_) => false,
+            Self::State(id) => pred(*id),
+        }
+    }
+
+    pub(crate) fn make_state(&mut self) {
+        match self {
+            Self::Free(id) => { *self = Self::State(*id); },
+            Self::State(_) => { },
+        }
+    }
+
+    /// Return the underlying node ID.
+    pub fn id(&self) -> NodeId {
+        match self {
+            Self::Free(id) => *id,
+            Self::State(id) => *id,
+        }
+    }
+
+    /// Return `true` if `self` has an underlying node ID equal to `id`.
+    pub fn has_id(&self, id: NodeId) -> bool {
+        match self {
+            Self::Free(k) => *k == id,
+            Self::State(k) => *k == id,
+        }
+    }
+
+    /// Return `true` if `self` is `Free` and has an underlying node ID equal to
+    /// `id`.
+    pub fn has_free_id(&self, id: NodeId) -> bool {
+        match self {
+            Self::Free(k) => *k == id,
+            Self::State(_) => false,
+        }
+    }
+
+    /// Return `true` if `self` is `State` and has an underlying node ID equal
+    /// to `id`.
+    pub fn has_state_id(&self, id: NodeId) -> bool {
+        match self {
+            Self::Free(_) => false,
+            Self::State(k) => *k == id,
+        }
+    }
+
+    /// Return the underlying node ID if `self` is `Free`.
+    pub fn free_id(&self) -> Option<NodeId> {
+        match self {
+            Self::Free(id) => Some(*id),
+            Self::State(_) => None,
+        }
+    }
+
+    /// Return the underlying node ID if `self` is `State`.
+    pub fn state_id(&self) -> Option<NodeId> {
+        match self {
+            Self::Free(_) => None,
+            Self::State(id) => Some(*id),
+        }
+    }
+
+    pub(crate) fn shift_id(&mut self, sh: usize) {
+        match self {
+            Self::Free(id) => { *id += sh; },
+            Self::State(id) => { *id += sh; },
+        }
+    }
+}
+
 /// Represents a diagram in the ZX(H)-calculus.
 ///
 /// Every node and edge is given a unique index for identification purposes.
@@ -24,8 +140,8 @@ pub struct Diagram {
     pub(crate) node_count: usize,
     pub(crate) wires: Vec<Option<Vec<NodeId>>>,
     pub(crate) wire_count: usize,
-    pub(crate) inputs: Vec<NodeId>,
-    pub(crate) outputs: Vec<NodeId>,
+    pub(crate) inputs: Vec<IONodeId>,
+    pub(crate) outputs: Vec<IONodeId>,
     pub(crate) free: Vec<NodeId>,
     pub(crate) scalar: C64,
 }
@@ -102,8 +218,28 @@ impl Diagram {
     /// Return the number of inputs.
     pub fn count_inputs(&self) -> usize { self.inputs.len() }
 
+    /// Return the number of free input wires.
+    pub fn count_free_inputs(&self) -> usize {
+        self.inputs.iter().filter(|input| input.is_free()).count()
+    }
+
+    /// Return the number of input wires with attached states.
+    pub fn count_state_inputs(&self) -> usize {
+        self.inputs.iter().filter(|input| input.is_state()).count()
+    }
+
     /// Return the number of outputs.
     pub fn count_outputs(&self) -> usize { self.outputs.len() }
+
+    /// Return the number of free output wires.
+    pub fn count_free_outputs(&self) -> usize {
+        self.outputs.iter().filter(|output| output.is_free()).count()
+    }
+
+    /// Return the number of output wires with attached effects.
+    pub fn count_effect_outputs(&self) -> usize {
+        self.outputs.iter().filter(|output| output.is_state()).count()
+    }
 
     /// Return the total number of spiders.
     pub fn count_spiders(&self) -> usize {
@@ -136,7 +272,7 @@ impl Diagram {
             .and_then(|n| {
                 (!n.is_output()).then(|| {
                     self.inputs.iter().enumerate()
-                        .find_map(|(qid, nid)| (*nid == id).then_some(qid))
+                        .find_map(|(qid, ioid)| ioid.has_id(id).then_some(qid))
                         .expect("bad book-keeping: unrecorded input")
                 })
             })
@@ -146,7 +282,7 @@ impl Diagram {
     // removed -- this is purely a search through `self.inputs`
     pub(crate) fn find_input_index(&self, id: NodeId) -> Option<QubitId> {
         self.inputs.iter().enumerate()
-            .find_map(|(qid, nid)| (*nid == id).then_some(qid))
+            .find_map(|(qid, ioid)| ioid.has_id(id).then_some(qid))
     }
 
     /// Return the qubit index corresponding to a node ID, if the node exists
@@ -156,7 +292,7 @@ impl Diagram {
             .and_then(|n| {
                 (!n.is_input()).then(|| {
                     self.outputs.iter().enumerate()
-                        .find_map(|(qid, nid)| (*nid == id).then_some(qid))
+                        .find_map(|(qid, ioid)| ioid.has_id(id).then_some(qid))
                         .expect("bad book-keeping: unrecorded output")
                 })
             })
@@ -166,7 +302,7 @@ impl Diagram {
     // removed -- this is purely a search through `self.outputs`
     pub(crate) fn find_output_index(&self, id: NodeId) -> Option<QubitId> {
         self.outputs.iter().enumerate()
-            .find_map(|(qid, nid)| (*nid == id).then_some(qid))
+            .find_map(|(qid, ioid)| ioid.has_id(id).then_some(qid))
     }
 
     // get the raw neighbor IDs of a node, if it exists
@@ -220,12 +356,12 @@ impl Diagram {
     pub fn add_node(&mut self, node: Node) -> NodeId {
         let id = self.fresh_node_id();
         if node.is_input() {
-            self.inputs.push(id);
+            self.inputs.push(IONodeId::Free(id));
         } else if node.is_output() {
-            self.outputs.push(id);
+            self.outputs.push(IONodeId::Free(id));
         }
-        let _ = self.nodes[id].insert(node);
-        let _ = self.wires[id].insert(Vec::new());
+        self.nodes[id] = Some(node);
+        self.wires[id] = Some(Vec::new());
         id
     }
 
@@ -261,11 +397,11 @@ impl Diagram {
                     .swap_remove(k);
             }
         }
-        if node.is_input() || self.inputs.contains(&id) {
+        if node.is_input() || self.inputs.iter().any(|ioid| ioid.has_id(id)) {
             let k = self.find_input_index(id).unwrap();
             self.inputs.remove(k);
         }
-        if node.is_output() || self.outputs.contains(&id) {
+        if node.is_output() || self.outputs.iter().any(|ioid| ioid.has_id(id)) {
             let k = self.find_output_index(id).unwrap();
             self.outputs.remove(k);
         }
@@ -299,11 +435,11 @@ impl Diagram {
                     .swap_remove(k);
             }
         }
-        if node.is_input() || self.inputs.contains(&id) {
+        if node.is_input() || self.inputs.iter().any(|ioid| ioid.has_id(id)) {
             let k = self.find_input_index(id).unwrap();
             self.inputs.remove(k);
         }
-        if node.is_output() || self.outputs.contains(&id) {
+        if node.is_output() || self.outputs.iter().any(|ioid| ioid.has_id(id)) {
             let k = self.find_output_index(id).unwrap();
             self.outputs.remove(k);
         }
@@ -489,12 +625,38 @@ impl Diagram {
 
     /// Get the node ID associated with the `q`-th input qubit index.
     pub fn input_id(&self, q: QubitId) -> Option<NodeId> {
-        self.inputs.get(q).copied()
+        self.inputs.get(q).map(|ioid| ioid.id())
     }
 
     /// Get the node ID associated with the `q`-th output qubit index.
     pub fn output_id(&self, q: QubitId) -> Option<NodeId> {
-        self.outputs.get(q).copied()
+        self.outputs.get(q).map(|ioid| ioid.id())
+    }
+
+    /// Remove tracking for the `q`-th input qubit index as such, returning its
+    /// associated node ID, if it has a state applied.
+    ///
+    /// If the input is [free][IONodeId::Free], no operation is performed and
+    /// `None` is returned.
+    pub fn forget_input(&mut self, q: QubitId) -> Option<NodeId> {
+        if self.inputs.get(q).is_some_and(|ioid| ioid.is_state()) {
+            Some(self.inputs.remove(q).id())
+        } else {
+            None
+        }
+    }
+
+    /// Remove tracking for the `q`-th output qubit index as such, returning its
+    /// associated node ID, if it has a state applied.
+    ///
+    /// If the output is [free][IONodeId::Free], no operation is performed and
+    /// `None` is returned.
+    pub fn forget_output(&mut self, q: QubitId) -> Option<NodeId> {
+        if self.outputs.get(q).is_some_and(|ioid| ioid.is_state()) {
+            Some(self.outputs.remove(q).id())
+        } else {
+            None
+        }
     }
 
     /// Replace an existing diagram input or output with a spider of arity 1.
@@ -505,10 +667,26 @@ impl Diagram {
     pub fn apply_state(&mut self, id: NodeId, spider: Spider)
         -> GraphResult<()>
     {
-        if self.get_node(id).is_some_and(|n| !n.is_generator()) {
-            let prev = self.get_node_mut(id).unwrap();
-            *prev = spider.into();
-            Ok(())
+        if let Some(n) = self.get_node(id) {
+            if n.is_input() {
+                self.inputs.iter_mut()
+                    .find(|ioid| ioid.has_id(id))
+                    .unwrap()
+                    .make_state();
+                let prev = self.get_node_mut(id).unwrap();
+                *prev = spider.into();
+                Ok(())
+            } else if n.is_output() {
+                self.outputs.iter_mut()
+                    .find(|ioid| ioid.has_id(id))
+                    .unwrap()
+                    .make_state();
+                let prev = self.get_node_mut(id).unwrap();
+                *prev = spider.into();
+                Ok(())
+            } else {
+                Err(ApplyStateNotIO(id))
+            }
         } else {
             Err(ApplyStateNotIO(id))
         }
@@ -554,8 +732,30 @@ impl Diagram {
             })
             .then_some(())
             .ok_or(ApplyBellNotIO(a, b))?;
-        let _ = self.nodes[a].insert(Node::z());
-        let _ = self.nodes[b].insert(Node::z());
+        if self.nodes[a].as_ref().unwrap().is_input() {
+            self.inputs.iter_mut()
+                .find(|ioid| ioid.has_id(a))
+                .unwrap()
+                .make_state();
+        } else {
+            self.outputs.iter_mut()
+                .find(|ioid| ioid.has_id(a))
+                .unwrap()
+                .make_state();
+        }
+        self.nodes[a] = Some(Node::z());
+        if self.nodes[b].as_ref().unwrap().is_input() {
+            self.inputs.iter_mut()
+                .find(|ioid| ioid.has_id(b))
+                .unwrap()
+                .make_state();
+        } else {
+            self.outputs.iter_mut()
+                .find(|ioid| ioid.has_id(b))
+                .unwrap()
+                .make_state();
+        }
+        self.nodes[b] = Some(Node::z());
         if let Some(spider) = phase {
             let spider_id = self.add_node(spider.into());
             self.add_wire(a, spider_id)?;
@@ -623,7 +823,7 @@ impl Diagram {
     /// Return an iterator over all diagram input node IDs, visited in qubit
     /// index order.
     ///
-    /// The iterator item type is `(`[`QubitId`]`, `[`NodeId`]`)`.
+    /// The iterator item type is `(`[`QubitId`]`, &`[`IONodeId`]`)`.
     pub fn inputs(&self) -> Inputs<'_> {
         Inputs { iter: self.inputs.iter().enumerate() }
     }
@@ -631,7 +831,7 @@ impl Diagram {
     /// Return an iterator over all diagram output node IDs, visited in qubit
     /// index order.
     ///
-    /// The iterator item type is `(`[`QubitId`]`, `[`NodeId`]`)`.
+    /// The iterator item type is `(`[`QubitId`]`, &`[`IONodeId`]`)`.
     pub fn outputs(&self) -> Outputs<'_> {
         Outputs { iter: self.outputs.iter().enumerate() }
     }
@@ -848,9 +1048,9 @@ impl Diagram {
             .flat_map(|nnb| nnb.iter_mut())
             .for_each(|nb| { *nb += shift; });
         inputs.iter_mut()
-            .for_each(|nid| { *nid += shift; });
+            .for_each(|ioid| { ioid.shift_id(shift); });
         outputs.iter_mut()
-            .for_each(|nid| { *nid += shift; });
+            .for_each(|ioid| { ioid.shift_id(shift); });
         free.iter_mut()
             .for_each(|nid| { *nid += shift; });
         self.nodes.append(&mut nodes);
@@ -921,8 +1121,8 @@ impl Diagram {
         // find (input/output, interior neighbor)
         let self_inputs: Vec<(NodeId, Option<NodeId>)> =
             self.inputs()
-            .filter(|(_, nid)| self.nodes[*nid].as_ref().unwrap().is_input())
-            .map(|(_, nid)| {
+            .filter_map(|(_, ioid)| ioid.free_id())
+            .map(|nid| {
                 let mb_interior =
                     self.neighbors_of(nid)
                     .and_then(|mut nnb| nnb.next().map(|(nb, _)| nb));
@@ -931,8 +1131,8 @@ impl Diagram {
             .collect();
         let other_outputs: Vec<(NodeId, Option<NodeId>)> =
             other.outputs()
-            .filter(|(_, nid)| other.nodes[*nid].as_ref().unwrap().is_output())
-            .map(|(_, nid)| {
+            .filter_map(|(_, ioid)| ioid.free_id())
+            .map(|nid| {
                 let mb_interior =
                     other.neighbors_of(nid)
                     .and_then(|mut nnb| nnb.next().map(|(nb, _)| nb));
@@ -1004,8 +1204,8 @@ impl Diagram {
         // (input/output, interior neighbor)
         let self_outputs: Vec<(NodeId, Option<NodeId>)> =
             self.outputs()
-            .filter(|(_, nid)| self.nodes[*nid].as_ref().unwrap().is_output())
-            .map(|(_, nid)| {
+            .filter_map(|(_, ioid)| ioid.free_id())
+            .map(|nid| {
                 let mb_interior =
                     self.neighbors_of(nid)
                     .and_then(|mut nnb| nnb.next().map(|(nb, _)| nb));
@@ -1014,8 +1214,8 @@ impl Diagram {
             .collect();
         let other_inputs: Vec<(NodeId, Option<NodeId>)> =
             other.inputs()
-            .filter(|(_, nid)| other.nodes[*nid].as_ref().unwrap().is_input())
-            .map(|(_, nid)| {
+            .filter_map(|(_, ioid)| ioid.free_id())
+            .map(|nid| {
                 let mb_interior =
                     other.neighbors_of(nid)
                     .and_then(|mut nnb| nnb.next().map(|(nb, _)| nb));
@@ -1197,7 +1397,8 @@ impl Diagram {
         // init with input nodes to make sure they're seen first
         let mut to_visit: VecDeque<(NodeId, &Node)> =
             self.inputs()
-            .map(|(_, nid)| (nid, self.get_node(nid).unwrap()))
+            .map(|(_, ioid)| ioid.id())
+            .map(|nid| (nid, self.get_node(nid).unwrap()))
             .collect();
         self.element_explore(
             &wire_nums, &mut visited, &mut to_visit, &mut elements);
@@ -1246,7 +1447,8 @@ impl Diagram {
         let mut to_visit: VecDeque<NodeId>;
         let mut io_visited: Vec<NodeId> =
             Vec::with_capacity(self.inputs.len() + self.outputs.len());
-        for io in self.inputs.iter().chain(&self.outputs).copied() {
+        for ioid in self.inputs.iter().chain(&self.outputs) {
+            let io = ioid.id();
             if io_visited.contains(&io) { continue; }
             to_visit = vec![io].into();
             while let Some(id) = to_visit.pop_back() {
@@ -1351,7 +1553,9 @@ impl Diagram {
                     .add_pair(fontsize(FONTSIZE))
                     .add_pair(margin(NODE_MARGIN)),
             );
-        // ensure all inputs are in a subgraph at the same rank
+
+        // ensure all inputs are in a subgraph at the same rank, attaching the
+        // overall scalar at the bottom
         let mut inputs_subgraph_stmt =
             StmtList::new()
             .add_attr(
@@ -1359,7 +1563,8 @@ impl Diagram {
                 AttrList::new().add_pair(rank(RankType::Source)),
             );
         let mut prev: Option<usize> = None;
-        for (qid, &nid) in self.inputs.iter().enumerate() {
+        for (qid, ioid) in self.inputs.iter().enumerate() {
+            let nid = ioid.id();
             let node = self.get_node(nid).unwrap();
             let attrs =
                 if node.is_generator() {
@@ -1375,12 +1580,45 @@ impl Diagram {
             if let Some(pid) = prev {
                 inputs_subgraph_stmt =
                     inputs_subgraph_stmt.add_edge(
-                        Edge::head_node(pid.into(), Some(Port::compass(Compass::South)))
-                        .line_to_node(nid.into(), Some(Port::compass(Compass::North)))
+                        Edge::head_node(
+                            pid.into(),
+                            Some(Port::compass(Compass::South)),
+                        )
+                        .line_to_node(
+                            nid.into(),
+                            Some(Port::compass(Compass::North)),
+                        )
                         .add_attrpair(style(Style::Invisible))
                     );
             }
             prev = Some(nid);
+        }
+        // add the overall scalar
+        let mut a = self.scalar;
+        a.re = (1e6 * a.re).round() / 1e6;
+        a.im = (1e6 * a.im).round() / 1e6;
+        let scalar_id = self.nodes.len();
+        let attrs =
+            AttrList::new()
+            .add_pair(label(format!("{}", a)))
+            .add_pair(shape(Shape::Rectangle))
+            .add_pair(style(Style::Filled))
+            .add_pair(fillcolor(H_COLOR));
+        inputs_subgraph_stmt =
+            inputs_subgraph_stmt.add_node(scalar_id.into(), None, Some(attrs));
+        if let Some(pid) = prev {
+            inputs_subgraph_stmt =
+                inputs_subgraph_stmt.add_edge(
+                    Edge::head_node(
+                        pid.into(),
+                        Some(Port::compass(Compass::South)),
+                    )
+                    .line_to_node(
+                        scalar_id.into(),
+                        Some(Port::compass(Compass::North)),
+                    )
+                    .add_attrpair(style(Style::Invisible))
+                );
         }
         statements =
             statements.add_subgraph(SubGraph::cluster(inputs_subgraph_stmt));
@@ -1392,7 +1630,8 @@ impl Diagram {
                 AttrList::new().add_pair(rank(RankType::Sink)),
             );
         prev = None;
-        for (qid, &nid) in self.outputs.iter().enumerate() {
+        for (qid, ioid) in self.outputs.iter().enumerate() {
+            let nid = ioid.id();
             let node = self.get_node(nid).unwrap();
             let attrs =
                 if node.is_generator() {
@@ -1408,8 +1647,14 @@ impl Diagram {
             if let Some(pid) = prev {
                 outputs_subgraph_stmt =
                     outputs_subgraph_stmt.add_edge(
-                        Edge::head_node(pid.into(), Some(Port::compass(Compass::South)))
-                        .line_to_node(nid.into(), Some(Port::compass(Compass::North)))
+                        Edge::head_node(
+                            pid.into(),
+                            Some(Port::compass(Compass::South)),
+                        )
+                        .line_to_node(
+                            nid.into(),
+                            Some(Port::compass(Compass::North)),
+                        )
                         .add_attrpair(style(Style::Invisible))
                     );
             }
@@ -1419,24 +1664,14 @@ impl Diagram {
             statements.add_subgraph(SubGraph::cluster(outputs_subgraph_stmt));
         // add interior nodes
         for (id, node) in self.nodes_inner() {
-            if self.inputs.contains(&id) || self.outputs.contains(&id) {
+            if self.inputs.iter().any(|ioid| ioid.has_id(id))
+                || self.outputs.iter().any(|ioid| ioid.has_id(id))
+            {
                 continue;
             }
             let attrs = node.graph_attrs();
             statements = statements.add_node(id.into(), None, Some(attrs));
         }
-        // add the overall scalar
-        let mut a = self.scalar;
-        a.re = (1e6 * a.re).round() / 1e6;
-        a.im = (1e6 * a.im).round() / 1e6;
-        let scalar_id = self.nodes.len();
-        let attrs =
-            AttrList::new()
-            .add_pair(label(format!("{}", a)))
-            .add_pair(shape(Shape::Rectangle))
-            .add_pair(style(Style::Filled))
-            .add_pair(fillcolor(H_COLOR));
-        statements = statements.add_node(scalar_id.into(), None, Some(attrs));
         // add wires
         for (left, right) in self.wires() {
             statements =
@@ -1583,23 +1818,19 @@ impl<'a> std::iter::FusedIterator for NodesInner<'a> { }
 
 /// Iterator over all diagram input node IDs, visited in qubit index order.
 ///
-/// The iterator item type is `(`[`QubitId`]`, `[`NodeId`]`)`.
+/// The iterator item type is `(`[`QubitId`]`, &`[`IONodeId`]`)`.
 pub struct Inputs<'a> {
-    iter: std::iter::Enumerate<std::slice::Iter<'a, NodeId>>
+    iter: std::iter::Enumerate<std::slice::Iter<'a, IONodeId>>
 }
 
 impl<'a> Iterator for Inputs<'a> {
-    type Item = (NodeId, QubitId);
+    type Item = (QubitId, &'a IONodeId);
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(qid, nid)| (qid, *nid))
-    }
+    fn next(&mut self) -> Option<Self::Item> { self.iter.next() }
 }
 
 impl<'a> DoubleEndedIterator for Inputs<'a> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back().map(|(qid, nid)| (qid, *nid))
-    }
+    fn next_back(&mut self) -> Option<Self::Item> { self.iter.next_back() }
 }
 
 impl<'a> ExactSizeIterator for Inputs<'a> {
@@ -1610,23 +1841,19 @@ impl<'a> std::iter::FusedIterator for Inputs<'a> { }
 
 /// Iterator over all diagram output node IDs, visited in qubit index order.
 ///
-/// The iterator item type is `(`[`QubitId`]`, `[`NodeId`]`)`.
+/// The iterator item type is `(`[`QubitId`]`, &`[`IONodeId`]`)`.
 pub struct Outputs<'a> {
-    iter: std::iter::Enumerate<std::slice::Iter<'a, NodeId>>
+    iter: std::iter::Enumerate<std::slice::Iter<'a, IONodeId>>
 }
 
 impl<'a> Iterator for Outputs<'a> {
-    type Item = (NodeId, QubitId);
+    type Item = (QubitId, &'a IONodeId);
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(qid, nid)| (qid, *nid))
-    }
+    fn next(&mut self) -> Option<Self::Item> { self.iter.next() }
 }
 
 impl<'a> DoubleEndedIterator for Outputs<'a> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back().map(|(qid, nid)| (qid, *nid))
-    }
+    fn next_back(&mut self) -> Option<Self::Item> { self.iter.next_back() }
 }
 
 impl<'a> ExactSizeIterator for Outputs<'a> {
@@ -1981,14 +2208,14 @@ impl<'a> DoubleEndedIterator for NeighborsInner<'a> {
 
 impl<'a> std::iter::FusedIterator for NeighborsInner<'a> { }
 
-/// Create a [`Diagram`] using an abbreviated syntax.
+/// Create a [graph-based diagram][Diagram] using an abbreviated syntax.
 ///
 /// The first block defines nodes with the syntax
 /// ```text
-/// <node_label> = <node_type> ( arg )
+/// <node_label> = <node_type> ( args... )
 /// ```
-/// where `<node_type>` is a variant or method of [`Node`], and `arg` is any
-/// arguments to be passed to it. Note that `arg` may be left empty. Labels
+/// where `<node_type>` is a variant or method of [`Node`], and `args...` is any
+/// arguments to be passed to it. Note that `args...` may be left empty. Labels
 /// given to nodes in this block are then used to define wire connections in the
 /// second block with the syntax
 /// ```text
@@ -2021,12 +2248,12 @@ impl<'a> std::iter::FusedIterator for NeighborsInner<'a> { }
 /// # Ok(())
 /// # }
 /// ```
-/// is equivalent to
+/// constructs the same diagram as
 /// ```
 /// # use zx_calc::graph::*;
-/// use zx_calc::diagram;
+/// use zx_calc::graph_diagram;
 ///
-/// diagram!(
+/// graph_diagram!(
 ///     nodes: {
 ///         i = input ( ),
 ///         o = output ( ),
@@ -2051,7 +2278,7 @@ impl<'a> std::iter::FusedIterator for NeighborsInner<'a> { }
 /// }
 /// ```
 #[macro_export]
-macro_rules! diagram {
+macro_rules! graph_diagram {
     (
         nodes: {
             $( $node_name:ident = $node_def:ident ( $( $arg:expr ),* $(,)? ) ),*
@@ -2064,10 +2291,10 @@ macro_rules! diagram {
         {
             let mut diagram = $crate::graph::Diagram::new();
             $(
-                let $node_name =
-                    diagram.add_node(
-                        $crate::graph::Node::$node_def($( ($arg).into() ),*)
-                    );
+            let $node_name =
+                diagram.add_node(
+                    $crate::graph::Node::$node_def($( ($arg).into() ),*)
+                );
             )*
             Ok(())
             $(
@@ -2339,20 +2566,41 @@ mod tests {
         assert!(dg.apply_state(0, Spider::Z(Phase::zero())).is_err());
         assert!(dg.apply_state(10, Spider::Z(Phase::zero())).is_err());
 
-        assert_eq!(dg.count_nodes(),   9);
-        assert_eq!(dg.count_inputs(),  3);
-        assert_eq!(dg.count_outputs(), 2);
-        assert_eq!(dg.count_z(),       3);
-        assert_eq!(dg.count_x(),       1);
+        assert_eq!(dg.count_nodes(),       9);
+        assert_eq!(dg.count_inputs(),      3);
+        assert_eq!(dg.count_free_inputs(), 2);
+        assert_eq!(dg.count_outputs(),     2);
+        assert_eq!(dg.count_z(),           3);
+        assert_eq!(dg.count_x(),           1);
+
+        let inputs: Vec<(QubitId, IONodeId)> =
+            dg.inputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let inputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(2)),
+                (1, IONodeId::State(3)),
+                (2, IONodeId::Free(4)),
+            ];
+        assert_eq!(inputs, inputs_expected);
 
         dg.apply_effect_output(1, Spider::X(Phase::new(1, 3))).unwrap();
         assert!(dg.apply_effect_output(2, Spider::X(Phase::zero())).is_err());
 
-        assert_eq!(dg.count_nodes(),   9);
-        assert_eq!(dg.count_inputs(),  3);
-        assert_eq!(dg.count_outputs(), 2);
-        assert_eq!(dg.count_z(),       3);
-        assert_eq!(dg.count_x(),       2);
+        let outputs: Vec<(QubitId, IONodeId)> =
+            dg.outputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let outputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(6)),
+                (1, IONodeId::State(7)),
+            ];
+        assert_eq!(outputs, outputs_expected);
+
+        assert_eq!(dg.count_nodes(),        9);
+        assert_eq!(dg.count_inputs(),       3);
+        assert_eq!(dg.count_outputs(),      2);
+        assert_eq!(dg.count_free_outputs(), 1);
+        assert_eq!(dg.count_z(),            3);
+        assert_eq!(dg.count_x(),            2);
     }
 
     #[test]
@@ -2368,24 +2616,45 @@ mod tests {
 
         assert!(dg.apply_bell_input(0, 2, None).unwrap().is_none());
 
-        assert_eq!(dg.count_nodes(),   9);
-        assert_eq!(dg.count_inputs(),  3);
-        assert_eq!(dg.count_outputs(), 2);
-        assert_eq!(dg.count_z(),       4);
-        assert_eq!(dg.count_x(),       1);
-        assert_eq!(dg.count_wires(),   10);
+        let inputs: Vec<(QubitId, IONodeId)> =
+            dg.inputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let inputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::State(2)),
+                (1, IONodeId::Free(3)),
+                (2, IONodeId::State(4)),
+            ];
+        assert_eq!(inputs, inputs_expected);
+
+        assert_eq!(dg.count_nodes(),       9);
+        assert_eq!(dg.count_inputs(),      3);
+        assert_eq!(dg.count_free_inputs(), 1);
+        assert_eq!(dg.count_outputs(),     2);
+        assert_eq!(dg.count_z(),           4);
+        assert_eq!(dg.count_x(),           1);
+        assert_eq!(dg.count_wires(),       10);
 
         assert_eq!(
             dg.apply_bell_output(0, 1, Some(Spider::X(Phase::pi()))).unwrap(),
             Some(9),
         );
 
-        assert_eq!(dg.count_nodes(),   10);
-        assert_eq!(dg.count_inputs(),  3);
-        assert_eq!(dg.count_outputs(), 2);
-        assert_eq!(dg.count_z(),       6);
-        assert_eq!(dg.count_x(),       2);
-        assert_eq!(dg.count_wires(),   12);
+        let outputs: Vec<(QubitId, IONodeId)> =
+            dg.outputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let outputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::State(6)),
+                (1, IONodeId::State(7)),
+            ];
+        assert_eq!(outputs, outputs_expected);
+
+        assert_eq!(dg.count_nodes(),        10);
+        assert_eq!(dg.count_inputs(),       3);
+        assert_eq!(dg.count_outputs(),      2);
+        assert_eq!(dg.count_free_outputs(), 0);
+        assert_eq!(dg.count_z(),            6);
+        assert_eq!(dg.count_x(),            2);
+        assert_eq!(dg.count_wires(),        12);
 
         assert!(dg.apply_bell(0, 1, None).is_err());
         assert!(dg.apply_bell(20, 21, None).is_err());
@@ -2464,17 +2733,26 @@ mod tests {
     fn iter_inputs() {
         let mut dg = build_simple();
 
-        let inputs: Vec<(QubitId, NodeId)> = dg.inputs().collect();
-        let inputs_expected: Vec<(QubitId, NodeId)> =
-            vec![ (0, 2), (1, 3), (2, 4) ];
+        let inputs: Vec<(QubitId, IONodeId)> =
+            dg.inputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let inputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(2)),
+                (1, IONodeId::Free(3)),
+                (2, IONodeId::Free(4)),
+            ];
         assert_eq!(inputs, inputs_expected);
 
         dg.remove_node(3).unwrap();
         dg.remove_node(8).unwrap();
 
-        let inputs: Vec<(QubitId, NodeId)> = dg.inputs().collect();
-        let inputs_expected: Vec<(QubitId, NodeId)> =
-            vec![ (0, 2), (1, 4) ];
+        let inputs: Vec<(QubitId, IONodeId)> =
+            dg.inputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let inputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(2)),
+                (1, IONodeId::Free(4)),
+            ];
         assert_eq!(inputs, inputs_expected);
     }
 
@@ -2482,18 +2760,25 @@ mod tests {
     fn iter_outputs() {
         let mut dg = build_simple();
 
-        let outputs: Vec<(QubitId, NodeId)> = dg.outputs().collect();
-        let outputs_expected: Vec<(QubitId, NodeId)> =
-            vec![ (0, 6), (1, 7) ];
+        let outputs: Vec<(QubitId, IONodeId)> =
+            dg.outputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let outputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(6)),
+                (1, IONodeId::Free(7)),
+            ];
         assert_eq!(outputs, outputs_expected);
 
         dg.remove_node(3).unwrap();
         dg.remove_node(8).unwrap();
         dg.remove_node(6).unwrap();
 
-        let outputs: Vec<(QubitId, NodeId)> = dg.outputs().collect();
-        let outputs_expected: Vec<(QubitId, NodeId)> =
-            vec![ (0, 7) ];
+        let outputs: Vec<(QubitId, IONodeId)> =
+            dg.outputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let outputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(7)),
+            ];
         assert_eq!(outputs, outputs_expected);
     }
 
@@ -2988,7 +3273,7 @@ mod tests {
     fn macro_build() -> GraphResult<()> {
         use std::collections::HashMap;
         let (diagram, ids): (Diagram, HashMap<&'static str, NodeId>) =
-            diagram!(
+            graph_diagram!(
                 nodes: {
                     z0 = Z (Phase::new(1, 6)),
                     z1 = Z (Phase::new(1, 3)),

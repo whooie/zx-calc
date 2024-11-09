@@ -16,7 +16,27 @@ pub(crate) enum Kind {
     Unknown,
 }
 
-/// `ElementData` is a sealed traits to govern tensor storage types -- we want
+impl Kind {
+    pub(crate) fn is_id(&self) -> bool { matches!(self, Self::Id(_)) }
+
+    pub(crate) fn is_scalar(&self) -> bool { matches!(self, Self::Scalar(_)) }
+
+    pub(crate) fn is_z(&self) -> bool { matches!(self, Self::Z(_)) }
+
+    pub(crate) fn is_x(&self) -> bool { matches!(self, Self::X(_)) }
+
+    pub(crate) fn is_h(&self) -> bool { matches!(self, Self::H(_)) }
+
+    pub(crate) fn is_swap(&self) -> bool { matches!(self, Self::Swap(..)) }
+
+    pub(crate) fn is_cup(&self) -> bool { matches!(self, Self::Cup(..)) }
+
+    pub(crate) fn is_cap(&self) -> bool { matches!(self, Self::Cap(..)) }
+
+    pub(crate) fn is_unknown(&self) -> bool { matches!(self, Self::Unknown) }
+}
+
+/// `ElementData` is a sealed trait to govern tensor storage types -- we want
 /// to take advantage of the type system to make `Element` (and extensions
 /// thereof) generic over storage types, but ensure strict relationships between
 /// constructor methods and `Kind` without having to make `Kind` public.
@@ -37,6 +57,9 @@ pub trait ElementData: Sized + ElementDataSeal {
     /// Returned by [`Self::output_iter`], giving the indices of all output
     /// wires.
     type OutputIter<'a>: Iterator<Item = usize> where Self: 'a;
+
+    /// Shift all wire indices by a uniform distance.
+    fn shift_indices(&mut self, sh: usize);
 
     /// Return an iterator over all input (bra) wire indices.
     fn input_iter(&self) -> Self::InputIter<'_>;
@@ -203,6 +226,9 @@ where A: From<C64>
 impl<A> Element<A>
 where A: ElementData
 {
+    /// Shift all wire indices by a uniform distance.
+    pub fn shift_indices(&mut self, sh: usize) { self.data.shift_indices(sh); }
+
     /// Return an iterator over all input (bra) wire indices.
     pub fn input_iter(&self) -> A::InputIter<'_> { self.data.input_iter() }
 
@@ -270,6 +296,60 @@ where A: ElementData
         Self { kind, data }
     }
 
+    /// Create a Z-spider with phase 0.
+    pub fn z_0<I, J>(ins: I, outs: J) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::z(ins, outs, None)
+    }
+
+    /// Create a Z-spider with π phase.
+    pub fn z_pi<I, J>(ins: I, outs: J) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::z(ins, outs, Some(Phase::pi()))
+    }
+
+    /// Create a Z-spider with π/2 phase.
+    pub fn z_pi2<I, J>(ins: I, outs: J) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::z(ins, outs, Some(Phase::pi2()))
+    }
+
+    /// Create a Z-spider with π/4 phase.
+    pub fn z_pi4<I, J>(ins: I, outs: J) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::z(ins, outs, Some(Phase::pi4()))
+    }
+
+    /// Create a Z-spider with π/8 phase.
+    pub fn z_pi8<I, J>(ins: I, outs: J) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::z(ins, outs, Some(Phase::pi8()))
+    }
+
+    /// Create a Z-spider with phase `(a / b) × 2π`.
+    pub fn z_frac<I, J>(ins: I, outs: J, a: i64, b: i64) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::z(ins, outs, Some(Phase::new(a, b)))
+    }
+
     /// Create an X-spider.
     ///
     /// <blockquote>
@@ -290,6 +370,60 @@ where A: ElementData
         let kind = Kind::X(phase.unwrap_or_else(Phase::zero));
         let data = A::x(ins, outs, phase);
         Self { kind, data }
+    }
+
+    /// Create an X-spider with phase 0.
+    pub fn x_0<I, J>(ins: I, outs: J) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::x(ins, outs, None)
+    }
+
+    /// Create an X-spider with π phase.
+    pub fn x_pi<I, J>(ins: I, outs: J) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::x(ins, outs, Some(Phase::pi()))
+    }
+
+    /// Create an X-spider with π/2 phase.
+    pub fn x_pi2<I, J>(ins: I, outs: J) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::x(ins, outs, Some(Phase::pi2()))
+    }
+
+    /// Create an X-spider with π/4 phase.
+    pub fn x_pi4<I, J>(ins: I, outs: J) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::x(ins, outs, Some(Phase::pi4()))
+    }
+
+    /// Create an X-spider with π/8 phase.
+    pub fn x_pi8<I, J>(ins: I, outs: J) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::x(ins, outs, Some(Phase::pi8()))
+    }
+
+    /// Create an X-spider with phase `(a / b) × 2π`.
+    pub fn x_frac<I, J>(ins: I, outs: J, a: i64, b: i64) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::x(ins, outs, Some(Phase::new(a, b)))
     }
 
     /// Create an H-box.
@@ -315,6 +449,21 @@ where A: ElementData
         let kind = Kind::H(a.unwrap_or_else(|| -C64::from(1.0)));
         let data = A::h(ins, outs, a);
         Self { kind, data }
+    }
+
+    /// Create an H-box with default argument, `-1`.
+    pub fn h_def<I, J>(ins: I, outs: J) -> Self
+    where
+        I: IntoIterator<Item = usize>,
+        J: IntoIterator<Item = usize>,
+    {
+        Self::h(ins, outs, None)
+    }
+
+    /// Create an H-box with default argument, `-1`, on a single wire (i.e. an
+    /// ordinary Hadamard gate).
+    pub fn had(wire: usize) -> Self {
+        Self::h([wire], [wire], None)
     }
 
     /// Create a swap.

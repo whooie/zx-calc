@@ -56,6 +56,14 @@ impl ElementData for Sp {
         }
     }
 
+    fn shift_indices(&mut self, sh: usize) {
+        self.0.iter_mut()
+            .for_each(|term| {
+                term.ket_mut().shift_indices_r(sh);
+                term.bra_mut().shift_indices_r(sh);
+            });
+    }
+
     fn output_iter(&self) -> Self::OutputIter<'_> {
         if let Some(first) = self.0.first() {
             if first.is_scalar() {
