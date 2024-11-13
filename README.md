@@ -1,7 +1,7 @@
 # zx-calc
 
 <p align="center">
-    <img src="assets/logo.svg" alt="logo" width="20%" />
+    <img src="assets/logo.svg" alt="logo" width="35%" />
 </p>
 
 *WARNING: This project is in a very early state! Main tools are usable (see
