@@ -1,10 +1,10 @@
 # zx-calc
 
-<div style="text-align: center; width: 50%; margin: auto auto;">
+<div style="text-align: center; width: 10%; margin: auto auto;">
     <img
         src="assets/logo.svg"
         alt="addition"
-        style="width: 100%"
+        style="width: 10%"
     ></img>
 </div>
 
