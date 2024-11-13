@@ -33,9 +33,9 @@
 
 pub mod circuit;
 pub mod phase;
-pub mod complex;
 pub mod tensor;
 pub mod graph;
+pub mod graph2;
 pub mod indexmap;
 pub(crate) mod vizdefs;
 

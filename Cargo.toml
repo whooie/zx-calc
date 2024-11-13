@@ -33,6 +33,10 @@ embed-doc-image = "0.1.4"
 path = "lib/lib.rs"
 name = "zx_calc"
 
+[features]
+default = ["doc-images"]
+doc-images = []
+
 [dev-dependencies]
 anyhow = "1.0.80"
 rand = "0.8.5"
@@ -48,3 +52,4 @@ strip = true
 # To build locally use
 # RUSTDOCFLAGS="--html-in-header katex-header.html" cargo doc --no-deps --document-private-items --open
 rustdoc-args = ["--html-in-header", "katex-header.html"]
+features = ["doc-images"]
