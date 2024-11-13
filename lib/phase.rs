@@ -39,11 +39,19 @@ pub(crate) fn r2f(a: R64) -> f64 { *a.numer() as f64 / *a.denom() as f64 }
 /// A description of a phase.
 ///
 /// This type relies on rational approximation, holding an inner [`R64`]
-/// representing the number φ such that the phase represented by a `Phase` as a
-/// whole is 2π × φ.
+/// representing the number *φ* such that the phase represented by a `Phase` as
+/// a whole is 2*π* × *φ*.
 ///
-/// Note that φ is constrained to positive values modulo 2π in all operations,
-/// which has implications for multiplication and division.
+/// Note that *φ* is constrained to positive values modulo 2*π* in all
+/// operations, which has implications for multiplication and division.
+///
+/// ```
+/// # use zx_calc::phase::Phase;
+/// assert_eq!(  Phase::new(3, 4),      -Phase::new(1, 4) );
+/// assert_eq!(  Phase::new(3, 4) / 2,   Phase::new(3, 8) );
+/// assert_eq!( -Phase::new(1, 4) / 2,  -Phase::new(5, 8) );
+/// assert_eq!( -Phase::new(5, 8),       Phase::new(3, 8) );
+/// ```
 #[derive(Copy, Clone, Debug)]
 pub struct Phase(pub R64);
 
