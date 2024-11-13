@@ -1,9 +1,12 @@
 use std::{ collections::VecDeque, fs, io::Write, path::Path };
 use num_complex::Complex64 as C64;
 use rustc_hash::FxHashMap;
-use crate::graph::{ GraphResult, Node, NodeData, NodeId, QubitId, Spider };
+use crate::{
+    graph::{ GraphError, GraphResult, Node, NodeData, NodeId, QubitId, Spider },
+    phase::Phase,
+};
 
-use crate::graph::GraphError::*;
+use GraphError::*;
 
 fn fst<T, U>(pair: (T, U)) -> T { pair.0 }
 
@@ -167,7 +170,7 @@ impl Diagram {
 
     /// Create a new, disconnected diagram from a set of nodes.
     ///
-    /// All nodes passed to this function are given unique IDs startinf from 0,
+    /// All nodes passed to this function are given unique IDs starting from 0,
     /// i.e. if `n` nodes are passed to this function then the first node seen
     /// will have ID `0`, and the last will have ID `n - 1`. Input and output
     /// nodes will be given associated qubit numbers in the order they are seen,
@@ -268,14 +271,16 @@ impl Diagram {
     /// Return the qubit index corresponding to a node ID, if the node exists
     /// and is an input.
     pub fn get_input_index(&self, id: NodeId) -> Option<QubitId> {
-        self.get_node(id)
-            .and_then(|n| {
-                (!n.is_output()).then(|| {
-                    self.inputs.iter().enumerate()
-                        .find_map(|(qid, ioid)| ioid.has_id(id).then_some(qid))
-                        .expect("bad book-keeping: unrecorded input")
-                })
-            })
+        self.inputs.iter().enumerate()
+            .find_map(|(qid, ioid)| ioid.has_id(id).then_some(qid))
+        // self.get_node(id)
+        //     .and_then(|n| {
+        //         (!n.is_output()).then(|| {
+        //             self.inputs.iter().enumerate()
+        //                 .find_map(|(qid, ioid)| ioid.has_id(id).then_some(qid))
+        //                 .expect("bad book-keeping: unrecorded input")
+        //         })
+        //     })
     }
 
     // like `get_input_index`, but for use after the node has already been
@@ -288,14 +293,16 @@ impl Diagram {
     /// Return the qubit index corresponding to a node ID, if the node exists
     /// and is an output.
     pub fn get_output_index(&self, id: NodeId) -> Option<QubitId> {
-        self.get_node(id)
-            .and_then(|n| {
-                (!n.is_input()).then(|| {
-                    self.outputs.iter().enumerate()
-                        .find_map(|(qid, ioid)| ioid.has_id(id).then_some(qid))
-                        .expect("bad book-keeping: unrecorded output")
-                })
-            })
+        self.outputs.iter().enumerate()
+            .find_map(|(qid, ioid)| ioid.has_id(id).then_some(qid))
+        // self.get_node(id)
+        //     .and_then(|n| {
+        //         (!n.is_input()).then(|| {
+        //             self.outputs.iter().enumerate()
+        //                 .find_map(|(qid, ioid)| ioid.has_id(id).then_some(qid))
+        //                 .expect("bad book-keeping: unrecorded output")
+        //         })
+        //     })
     }
 
     // like `get_output_index`, but for use after the node has already been
@@ -363,6 +370,37 @@ impl Diagram {
         self.nodes[id] = Some(node);
         self.wires[id] = Some(Vec::new());
         id
+    }
+
+    /// Add a Z-spider to the diagram and return its ID.
+    ///
+    /// `phase` defaults to 0.
+    pub fn add_z(&mut self, phase: Option<Phase>) -> NodeId {
+        self.add_node(Node::Z(phase.unwrap_or_else(Phase::zero)))
+    }
+
+    /// Add an X-spider to the diagram and return its ID.
+    ///
+    /// `phase` defaults to 0.
+    pub fn add_x(&mut self, phase: Option<Phase>) -> NodeId {
+        self.add_node(Node::X(phase.unwrap_or_else(Phase::zero)))
+    }
+
+    /// Add an H-box to the diagram and return its ID.
+    ///
+    /// `arg` defaults to –1.
+    pub fn add_h(&mut self, arg: Option<C64>) -> NodeId {
+        self.add_node(Node::H(arg.unwrap_or_else(|| -C64::from(1.0))))
+    }
+
+    /// Add an input node to the diagram and return its ID.
+    pub fn add_input(&mut self) -> NodeId {
+        self.add_node(Node::Input)
+    }
+
+    /// Add an output node to the diagram and return its ID.
+    pub fn add_output(&mut self) -> NodeId {
+        self.add_node(Node::Output)
     }
 
     /// Remove the node associated with a particular ID and return its data if
@@ -564,6 +602,26 @@ impl Diagram {
         Ok(input_id)
     }
 
+    /// Add a wire with an attached input spider state to a pre-existing node
+    /// and return the new node's ID.
+    ///
+    /// The pre-existing node cannot already be an input or output.
+    pub fn add_input_state(&mut self, id: NodeId, state: Spider)
+        -> GraphResult<NodeId>
+    {
+        self.get_node(id)
+            .ok_or(AddWireMissingNode(id))
+            .and_then(|node| {
+                (node.is_generator() || !self.is_connected(id).unwrap())
+                    .then_some(())
+                    .ok_or(AddWireConnectedIO(id))
+            })?;
+        let input_id = self.add_node(state.into());
+        self.add_wire(id, input_id)?;
+        self.inputs.push(IONodeId::State(input_id));
+        Ok(input_id)
+    }
+
     /// Add a wire with an attached [`Output`][Node::Output] to a pre-existing
     /// node and return the new output node's ID.
     ///
@@ -579,6 +637,26 @@ impl Diagram {
             })?;
         let output_id = self.add_node(Node::Output);
         self.add_wire(id, output_id)?;
+        Ok(output_id)
+    }
+
+    /// Add a wire with an attached output spider effect to a pre-existing node
+    /// and return the new node's ID.
+    ///
+    /// The pre-existing node cannot already be an input or output.
+    pub fn add_output_effect(&mut self, id: NodeId, effect: Spider)
+        -> GraphResult<NodeId>
+    {
+        self.get_node(id)
+            .ok_or(AddWireMissingNode(id))
+            .and_then(|node| {
+                (node.is_generator() || !self.is_connected(id).unwrap())
+                    .then_some(())
+                    .ok_or(AddWireConnectedIO(id))
+            })?;
+        let output_id = self.add_node(effect.into());
+        self.add_wire(id, output_id)?;
+        self.outputs.push(IONodeId::State(output_id));
         Ok(output_id)
     }
 
@@ -851,7 +929,8 @@ impl Diagram {
             nb_group: None,
             len: self.wire_count,
             seen: Vec::with_capacity(self.wire_count),
-            iter: self.wires.iter().enumerate() }
+            iter: self.wires.iter().enumerate()
+        }
     }
 
     /// Return an iterator over all wires in the diagram, visited in mostly
@@ -899,7 +978,8 @@ impl Diagram {
     /// visited in arbitrary order, if they exist.
     ///
     /// Note that this iterator will contain duplicate elements if there are
-    /// multiple wires going to the same neighbor.
+    /// multiple wires going to the same neighbor; if the node is connected to
+    /// itself, each such connection will be counted only once.
     ///
     /// The iterator item type is [`NodeId`].
     pub fn neighbor_ids_of(&self, id: NodeId) -> Option<NeighborIds<'_>> {
@@ -1967,8 +2047,8 @@ impl<'a> std::iter::FusedIterator for Wires<'a> { }
 ///
 /// Specifically, the iterator steps through wires as pairs of node IDs such
 /// that those whose left IDs are smaller in value are visited before those
-/// larger in value. In other wods, the left ID monotonically increases over the
-/// course of iteration while right IDs are free to vary in arbitrary order.
+/// larger in value. In other words, the left ID monotonically increases over
+/// the course of iteration while right IDs are free to vary in arbitrary order.
 /// Each wire is only visited once.
 ///
 /// The iterator item type is `(`[`NodeData`]`, `[`NodeData`]`)`.

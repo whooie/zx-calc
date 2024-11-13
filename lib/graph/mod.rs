@@ -43,9 +43,6 @@ pub enum GraphError {
     #[error("error in composition: cannot match {0} free output(s) with {1} free input(s)")]
     NonMatchingIO(usize, usize),
 
-    #[error("error constructing GraphViz representation: {0}")]
-    GraphVizError(String),
-
     #[error("I/O error: {0}")]
     IOError(#[from] std::io::Error),
 }
@@ -59,7 +56,11 @@ pub use diagram::*;
 
 pub mod circuit;
 
+pub mod clifft;
+
 pub mod rules;
+
+pub mod net;
 
 /// Identifies a node in a diagram by its index.
 pub type NodeId = usize;
@@ -67,6 +68,6 @@ pub type NodeId = usize;
 /// An (index, data) pair.
 pub type NodeData<'a> = (NodeId, &'a node::Node);
 
-/// Identifies an input or output qubit in a diagram by its node index.
+/// Identifies an input or output qubit in a diagram by its index.
 pub type QubitId = usize;
 

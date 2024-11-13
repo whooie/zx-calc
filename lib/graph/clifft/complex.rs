@@ -4,8 +4,8 @@
 //! All such elements can be represented using five integers
 //! (*k*, *a*, *b*, *c*, *d*), giving a complex number as
 //! (*a* + *b* *i* + *c* exp(*iπ*/4) + *d* exp(–*iπ*/4)). These are
-//! exact representations of all possible scalars that can arise from Clifford+T
-//! quantum circuits.
+//! exact representations of all possible scalars that can arise from
+//! Clifford+*T* quantum circuits.
 
 use std::ops::{ Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Neg };
 use num_complex::Complex64 as C64;
@@ -93,19 +93,19 @@ impl Complex {
         Self { div2: 0, re: 0, im: 0, ph_pos: 0, ph_neg: 1 }; 
 
     /// The real number √2.
-    pub const SQRT2: Self =
+    pub const SQRT_2: Self =
         Self { div2: 0, re: 0, im: 0, ph_pos: 1, ph_neg: 1 }; 
 
     /// The imaginary number *i*√2.
-    pub const ISQRT2: Self =
+    pub const ISQRT_2: Self =
         Self { div2: 0, re: 0, im: 0, ph_pos: 1, ph_neg: -1 }; 
 
     /// The real number 1/√2.
-    pub const FRAC_1_SQRT2: Self =
+    pub const FRAC_1_SQRT_2: Self =
         Self { div2: 1, re: 0, im: 0, ph_pos: 1, ph_neg: 1 }; 
 
     /// The imaginary unmber *i*/√2.
-    pub const FRAC_I_SQRT2: Self =
+    pub const FRAC_I_SQRT_2: Self =
         Self { div2: 1, re: 0, im: 0, ph_pos: 1, ph_neg: -1 }; 
 
     /// the constant value 0.
@@ -124,16 +124,16 @@ impl Complex {
     pub fn ph_neg() -> Self { Self::PH_NEG }
 
     /// the real number √2.
-    pub fn sqrt2() -> Self { Self::SQRT2 }
+    pub fn sqrt_2() -> Self { Self::SQRT_2 }
 
     /// the imaginary number *i*√2.
-    pub fn isqrt2() -> Self { Self::ISQRT2 }
+    pub fn isqrt_2() -> Self { Self::ISQRT_2 }
 
     /// the real number 1/√2.
-    pub fn frac_1_sqrt2() -> Self { Self::FRAC_1_SQRT2 }
+    pub fn frac_1_sqrt_2() -> Self { Self::FRAC_1_SQRT_2 }
 
     /// the imaginary unmber *i*/√2.
-    pub fn frac_i_sqrt2() -> Self { Self::FRAC_I_SQRT2 }
+    pub fn frac_i_sqrt_2() -> Self { Self::FRAC_I_SQRT_2 }
 
     /// Create a new `Complex`.
     pub fn new(div2: i32, re: i32, im: i32, ph_pos: i32, ph_neg: i32) -> Self {
@@ -276,6 +276,11 @@ impl Complex {
         let mut new = *self;
         new.reduce();
         new
+    }
+
+    /// Raise `self` to a non-negative integer power.
+    pub fn pow(self, pow: u32) -> Self {
+        (0..pow).fold(Self::ONE, |mut acc, _| { acc *= self; acc })
     }
 
     /// Multiply by a power of two.
