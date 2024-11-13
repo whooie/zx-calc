@@ -1,5 +1,13 @@
 # zx-calc
 
+<div style="text-align: center; width: 50%; margin: auto auto;">
+    <img
+        src="assets/logo.svg"
+        alt="addition"
+        style="width: 100%"
+    ></img>
+</div>
+
 *WARNING: This project is in a very early state! Main tools are usable (see
 the list of features below), but may be buggy and/or error-prone.*
 
