@@ -29,7 +29,6 @@ impl<'a> HSelfLoopAllData<'a> {
     pub fn groups(&self) -> &Vec<NodeId> { &self.hh }
 }
 
-impl RuleSeal for HSelfLoopAll { }
 impl RuleFinder for HSelfLoopAll {
     type Output<'a> = HSelfLoopAllData<'a>;
 
@@ -48,7 +47,6 @@ impl RuleFinder for HSelfLoopAll {
     }
 }
 
-impl<'a> RuleSeal for HSelfLoopAllData<'a> { }
 impl<'a> Rule for HSelfLoopAllData<'a> {
     fn simplify(self) {
         let Self { dg, hh } = self;

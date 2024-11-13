@@ -17,7 +17,6 @@ pub struct StateCopyData<'a> {
     pub(crate) spider: NodeId,
 }
 
-impl RuleSeal for StateCopy { }
 impl RuleFinder for StateCopy {
     type Output<'a> = StateCopyData<'a>;
 
@@ -43,7 +42,6 @@ impl RuleFinder for StateCopy {
     }
 }
 
-impl<'a> RuleSeal for StateCopyData<'a> { }
 impl<'a> Rule for StateCopyData<'a> {
     fn simplify(self) {
         let Self { dg, state, spider } = self;

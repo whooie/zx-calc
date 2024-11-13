@@ -18,7 +18,6 @@ pub struct HEulerData<'a> {
     pub(crate) s2: NodeId, // spider 2
 }
 
-impl RuleSeal for HEuler { }
 impl RuleFinder for HEuler {
     type Output<'a> = HEulerData<'a>;
 
@@ -38,7 +37,6 @@ impl RuleFinder for HEuler {
     }
 }
 
-impl<'a> RuleSeal for HEulerData<'a> { }
 impl<'a> Rule for HEulerData<'a> {
     fn simplify(self) {
         let Self { dg, s1, h, s2 } = self;

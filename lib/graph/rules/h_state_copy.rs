@@ -20,7 +20,6 @@ pub struct HStateCopyData<'a> {
     pub(crate) h: (NodeId, bool), // h-box copier
 }
 
-impl RuleSeal for HStateCopy { }
 impl RuleFinder for HStateCopy {
     type Output<'a> = HStateCopyData<'a>;
 
@@ -48,7 +47,6 @@ impl RuleFinder for HStateCopy {
     }
 }
 
-impl<'a> RuleSeal for HStateCopyData<'a> { }
 impl<'a> Rule for HStateCopyData<'a> {
     fn simplify(self) {
         let Self { dg, state, h: (h, is_had) } = self;

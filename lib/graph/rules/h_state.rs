@@ -17,7 +17,6 @@ pub struct HStateData<'a> {
     pub(crate) arg: C64,
 }
 
-impl RuleSeal for HState { }
 impl RuleFinder for HState {
     type Output<'a> = HStateData<'a>;
 
@@ -40,7 +39,6 @@ impl RuleFinder for HState {
     }
 }
 
-impl<'a> RuleSeal for HStateData<'a> { }
 impl<'a> Rule for HStateData<'a> {
     fn simplify(self) {
         const EPSILON: f64 = 1e-12;

@@ -17,7 +17,6 @@ pub struct HLoopData<'a> {
     pub(crate) hh: Vec<NodeId>, // h-boxes
 }
 
-impl RuleSeal for HLoop { }
 impl RuleFinder for HLoop {
     type Output<'a> = HLoopData<'a>;
 
@@ -43,7 +42,6 @@ impl RuleFinder for HLoop {
     }
 }
 
-impl<'a> RuleSeal for HLoopData<'a> { }
 impl<'a> Rule for HLoopData<'a> {
     fn simplify(self) {
         let Self { dg, s, hh } = self;

@@ -17,7 +17,6 @@ pub struct HHopfData<'a> {
     pub(crate) h: NodeId, // h-box
 }
 
-impl RuleSeal for HHopf { }
 impl RuleFinder for HHopf {
     type Output<'a> = HHopfData<'a>;
 
@@ -35,7 +34,6 @@ impl RuleFinder for HHopf {
     }
 }
 
-impl<'a> RuleSeal for HHopfData<'a> { }
 impl<'a> Rule for HHopfData<'a> {
     fn simplify(self) {
         let Self { dg, z, h } = self;

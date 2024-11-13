@@ -17,7 +17,6 @@ pub struct ColorFlipData<'a> {
     pub(crate) hh: Vec<(NodeId, NodeId)>, // [(h-box, neighbor)]
 }
 
-impl RuleSeal for ColorFlip { }
 impl RuleFinder for ColorFlip {
     type Output<'a> = ColorFlipData<'a>;
 
@@ -50,7 +49,6 @@ impl RuleFinder for ColorFlip {
     }
 }
 
-impl<'a> RuleSeal for ColorFlipData<'a> { }
 impl<'a> Rule for ColorFlipData<'a> {
     fn simplify(self) {
         let Self { dg, s, hh } = self;

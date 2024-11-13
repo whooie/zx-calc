@@ -21,7 +21,6 @@ pub struct HMultiStateData<'a> {
 //
 // (See `HSelfLoop`.)
 
-impl RuleSeal for HMultiState { }
 impl RuleFinder for HMultiState {
     type Output<'a> = HMultiStateData<'a>;
 
@@ -41,7 +40,6 @@ impl RuleFinder for HMultiState {
     }
 }
 
-impl<'a> RuleSeal for HMultiStateData<'a> { }
 impl<'a> Rule for HMultiStateData<'a> {
     fn simplify(self) {
         let Self { dg, h } = self;

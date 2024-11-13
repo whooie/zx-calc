@@ -17,7 +17,6 @@ pub struct HSelfLoopData<'a> {
     pub(crate) h: NodeId,
 }
 
-impl RuleSeal for HSelfLoop { }
 impl RuleFinder for HSelfLoop {
     type Output<'a> = HSelfLoopData<'a>;
 
@@ -31,7 +30,6 @@ impl RuleFinder for HSelfLoop {
     }
 }
 
-impl<'a> RuleSeal for HSelfLoopData<'a> { }
 impl<'a> Rule for HSelfLoopData<'a> {
     fn simplify(self) {
         let Self { dg, h } = self;

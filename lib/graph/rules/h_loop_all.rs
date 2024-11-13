@@ -34,7 +34,6 @@ impl<'a> HLoopAllData<'a> {
     pub fn groups(&self) -> &Vec<HLoopGroup> { &self.groups }
 }
 
-impl RuleSeal for HLoopAll { }
 impl RuleFinder for HLoopAll {
     type Output<'a> = HLoopAllData<'a>;
 
@@ -66,7 +65,6 @@ impl RuleFinder for HLoopAll {
     }
 }
 
-impl<'a> RuleSeal for HLoopAllData<'a> { }
 impl<'a> Rule for HLoopAllData<'a> {
     fn simplify(self) {
         let Self { dg, groups } = self;

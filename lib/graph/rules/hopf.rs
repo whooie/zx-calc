@@ -16,7 +16,6 @@ pub struct HopfData<'a> {
     pub(crate) n: usize, // mutual arity
 }
 
-impl RuleSeal for Hopf { }
 impl RuleFinder for Hopf {
     type Output<'a> = HopfData<'a>;
 
@@ -42,7 +41,6 @@ impl RuleFinder for Hopf {
     }
 }
 
-impl<'a> RuleSeal for HopfData<'a> { }
 impl<'a> Rule for HopfData<'a> {
     fn simplify(self) {
         let HopfData { dg, s1, s2, n } = self;

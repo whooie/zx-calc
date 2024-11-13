@@ -25,7 +25,6 @@ pub struct HBialgebraData<'a> {
     pub(crate) h2: (NodeId, C64,   usize),
 }
 
-impl RuleSeal for HBialgebra { }
 impl RuleFinder for HBialgebra {
     type Output<'a> = HBialgebraData<'a>;
 
@@ -45,7 +44,6 @@ impl RuleFinder for HBialgebra {
     }
 }
 
-impl<'a> RuleSeal for HBialgebraData<'a> { }
 impl<'a> Rule for HBialgebraData<'a> {
     fn simplify(self) {
         const EPSILON: f64 = 1e-12;

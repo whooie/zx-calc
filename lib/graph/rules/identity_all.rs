@@ -32,7 +32,6 @@ impl<'a> IdentityAllData<'a> {
     pub fn groups(&self) -> &Vec<IdentityKind> { &self.idents }
 }
 
-impl RuleSeal for IdentityAll { }
 impl RuleFinder for IdentityAll {
     type Output<'a> = IdentityAllData<'a>;
 
@@ -70,7 +69,6 @@ impl RuleFinder for IdentityAll {
     }
 }
 
-impl<'a> RuleSeal for IdentityAllData<'a> { }
 impl<'a> Rule for IdentityAllData<'a> {
     fn simplify(self) {
         let Self { dg, idents } = self;

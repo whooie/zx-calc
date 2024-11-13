@@ -30,7 +30,6 @@ impl<'a> FuseMultiData<'a> {
     pub fn len(&self) -> usize { 1 + self.others.len() }
 }
 
-impl RuleSeal for FuseMulti { }
 impl RuleFinder for FuseMulti {
     type Output<'a> = FuseMultiData<'a>;
 
@@ -67,7 +66,6 @@ impl RuleFinder for FuseMulti {
     }
 }
 
-impl<'a> RuleSeal for FuseMultiData<'a> { }
 impl<'a> Rule for FuseMultiData<'a> {
     fn simplify(self) {
         let Self { dg, init: id0, others, ph_sum } = self;

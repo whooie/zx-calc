@@ -38,7 +38,6 @@ impl<'a> HStateCopyAllData<'a> {
     pub fn groups(&self) -> &Vec<StateHPair> { &self.groups }
 }
 
-impl RuleSeal for HStateCopyAll { }
 impl RuleFinder for HStateCopyAll {
     type Output<'a> = HStateCopyAllData<'a>;
 
@@ -70,7 +69,6 @@ impl RuleFinder for HStateCopyAll {
     }
 }
 
-impl<'a> RuleSeal for HStateCopyAllData<'a> { }
 impl<'a> Rule for HStateCopyAllData<'a> {
     fn simplify(self) {
         let Self { dg, groups } = self;

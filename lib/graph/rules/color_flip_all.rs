@@ -40,7 +40,6 @@ impl<'a> ColorFlipAllData<'a> {
     pub fn groups(&self) -> &Vec<ColorFlipGroup> { &self.groups }
 }
 
-impl RuleSeal for ColorFlipAll { }
 impl RuleFinder for ColorFlipAll {
     type Output<'a> = ColorFlipAllData<'a>;
 
@@ -87,7 +86,6 @@ impl RuleFinder for ColorFlipAll {
     }
 }
 
-impl<'a> RuleSeal for ColorFlipAllData<'a> { }
 impl<'a> Rule for ColorFlipAllData<'a> {
     fn simplify(self) {
         let Self { dg, groups } = self;

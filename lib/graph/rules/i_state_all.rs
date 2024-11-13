@@ -37,7 +37,6 @@ impl<'a> IStateAllData<'a> {
     pub fn pairs(&self) -> &Vec<IStatePair> { &self.pairs }
 }
 
-impl RuleSeal for IStateAll { }
 impl RuleFinder for IStateAll {
     type Output<'a> = IStateAllData<'a>;
 
@@ -67,7 +66,6 @@ impl RuleFinder for IStateAll {
     }
 }
 
-impl<'a> RuleSeal for IStateAllData<'a> { }
 impl<'a> Rule for IStateAllData<'a> {
     fn simplify(self) {
         let Self { dg, pairs } = self;

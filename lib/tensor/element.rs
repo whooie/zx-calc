@@ -36,18 +36,8 @@ impl Kind {
     pub(crate) fn is_unknown(&self) -> bool { matches!(self, Self::Unknown) }
 }
 
-/// `ElementData` is a sealed trait to govern tensor storage types -- we want
-/// to take advantage of the type system to make `Element` (and extensions
-/// thereof) generic over storage types, but ensure strict relationships between
-/// constructor methods and `Kind` without having to make `Kind` public.
-pub(crate) mod private { pub trait ElementDataSeal { } }
-pub(crate) use private::ElementDataSeal;
-
 /// Trait for storage types to back [`Element`].
-///
-/// This trait is sealed to ensure strict relationships between [`Element`] and
-/// its backing data.
-pub trait ElementData: Sized + ElementDataSeal {
+pub trait ElementData: Sized {
     /// Associated error type for general operations.
     type Error;
 
@@ -90,56 +80,21 @@ pub trait ElementData: Sized + ElementDataSeal {
     fn is_scalar(&self) -> bool { self.as_scalar().is_some() }
 
     /// Return an identity element, corresponding to an empty wire.
-    ///
-    /// <blockquote>
-    ///   <p style="font-size:20px">
-    ///     id(<i>i</i>) =
-    ///       ∣0<sub><i>i</i></sub>⟩⟨0<sub><i>i</i></sub>∣
-    ///       + ∣1<sub><i>i</i></sub>⟩⟨1<sub><i>i</i></sub>∣
-    ///   </p>
-    /// </blockquote>
     fn id(i: usize) -> Self;
 
     /// Create a Z-spider.
-    ///
-    /// <blockquote>
-    ///   <p style="font-size:20px">
-    ///     <i>Z</i>([<i>i</i><sub>0</sub>, ..., <i>i</i><sub><i>n</i></sub>], [<i>j</i><sub>0</sub>, ..., <i>i</i><sub><i>m</i></sub>], <i>α</i>) =
-    ///       ∣0<sub><i>j</i><sub>0</sub></sub>, ..., 0<sub><i>j</i><sub><i>m</i></sub></sub>⟩⟨0<sub><i>i</i><sub>0</sub></sub>, ..., 0<sub><i>i</i><sub><i>n</i></sub></sub>∣
-    ///       + <i>e</i><sup><i>iα</i></sup>
-    ///         ∣1<sub><i>j</i><sub>0</sub></sub>, ..., 1<sub><i>j</i><sub><i>m</i></sub></sub>⟩⟨1<sub><i>i</i><sub>0</sub></sub>, ..., 1<sub><i>i</i><sub><i>n</i></sub></sub>∣
-    ///   </p>
-    /// </blockquote>
     fn z<I, J>(ins: I, outs: J, phase: Option<Phase>) -> Self
     where
         I: IntoIterator<Item = usize>,
         J: IntoIterator<Item = usize>;
 
     /// Create an X-spider.
-    ///
-    /// <blockquote>
-    ///   <p style="font-size:20px">
-    ///     <i>X</i>([<i>i</i><sub>0</sub>, ..., <i>i</i><sub><i>n</i></sub>], [<i>j</i><sub>0</sub>, ..., <i>i</i><sub><i>m</i></sub>], <i>α</i>) =
-    ///       ∣+<sub><i>j</i><sub>0</sub></sub>, ..., +<sub><i>j</i><sub><i>m</i></sub></sub>⟩⟨+<sub><i>i</i><sub>0</sub></sub>, ..., +<sub><i>i</i><sub><i>n</i></sub></sub>∣
-    ///       + <i>e</i><sup><i>iα</i></sup>
-    ///         ∣–<sub><i>j</i><sub>0</sub></sub>, ..., –<sub><i>j</i><sub><i>m</i></sub></sub>⟩⟨–<sub><i>i</i><sub>0</sub></sub>, ..., –<sub><i>i</i><sub><i>n</i></sub></sub>∣
-    ///   </p>
-    /// </blockquote>
     fn x<I, J>(ins: I, outs: J, phase: Option<Phase>) -> Self
     where
         I: IntoIterator<Item = usize>,
         J: IntoIterator<Item = usize>;
 
     /// Create an H-box.
-    ///
-    /// <blockquote>
-    ///   <p style="font-size:20px">
-    ///     <i>H</i>([<i>i</i><sub>0</sub>, ..., <i>i</i><sub><i>n</i></sub>], [<i>j</i><sub>0</sub>, ..., <i>i</i><sub><i>m</i></sub>], <i>a</i>) =
-    ///       Σ<sub><i>s</i><sub><i>k</i></sub> ∊ {0, 1}</sub>
-    ///         <i>a</i><sup>Π<sub><i>k</i></sub> <i>s</i><sub><i>k</i></sub></sup>
-    ///           ∣<i>s</i><sub><i>j</i><sub>0</sub></sub>, ..., <i>s</i><sub><i>j</i><sub><i>m</i></sub></sub>⟩⟨<i>s</i><sub><i>i</i><sub>0</sub></sub>, ..., <i>s</i><sub><i>i</i><sub><i>n</i></sub></sub>∣
-    ///   </p>
-    /// </blockquote>
     ///
     /// If the total number of input and output wires is 2 and `a` is –1, an
     /// extra scalar factor of 1/√2 should be added so that the result will
@@ -150,16 +105,6 @@ pub trait ElementData: Sized + ElementDataSeal {
         J: IntoIterator<Item = usize>;
 
     /// Create a swap.
-    ///
-    /// <blockquote>
-    ///   <p style="font-size:20px">
-    ///     swap(<i>i</i><sub>0</sub>, <i>i</i><sub>1</sub>) =
-    ///       ∣0<sub><i>i</i><sub>0</sub></sub>, 0<sub><i>i</i><sub>1</sub></sub>⟩⟨0<sub><i>i</i><sub>0</sub></sub>, 0<sub><i>i</i><sub>1</sub></sub>∣
-    ///       + ∣0<sub><i>i</i><sub>0</sub></sub>, 1<sub><i>i</i><sub>1</sub></sub>⟩⟨1<sub><i>i</i><sub>0</sub></sub>, 0<sub><i>i</i><sub>1</sub></sub>∣
-    ///       + ∣1<sub><i>i</i><sub>0</sub></sub>, 0<sub><i>i</i><sub>1</sub></sub>⟩⟨0<sub><i>i</i><sub>0</sub></sub>, 1<sub><i>i</i><sub>1</sub></sub>∣
-    ///       + ∣1<sub><i>i</i><sub>0</sub></sub>, 1<sub><i>i</i><sub>1</sub></sub>⟩⟨1<sub><i>i</i><sub>0</sub></sub>, 1<sub><i>i</i><sub>1</sub></sub>∣
-    ///   </p>
-    /// </blockquote>
     fn swap(i0: usize, i1: usize) -> Self;
 
     /// Create a cup (Bell state).
@@ -174,14 +119,6 @@ pub trait ElementData: Sized + ElementDataSeal {
     fn cup(i0: usize, i1: usize) -> Self;
 
     /// Create a cap (Bell effect).
-    ///
-    /// <blockquote>
-    ///   <p style="font-size:20px">
-    ///     cap(<i>i</i><sub>0</sub>, <i>i</i><sub>1</sub>) =
-    ///       ⟨0<sub><i>i</i><sub>0</sub></sub>, 0<sub><i>i</i><sub>1</sub></sub>∣
-    ///       + ⟨1<sub><i>i</i><sub>0</sub></sub>, 1<sub><i>i</i><sub>1</sub></sub>∣
-    ///   </p>
-    /// </blockquote>
     fn cap(i0: usize, i1: usize) -> Self;
 
     /// Compute the dot product `self · rhs`, consuming both.

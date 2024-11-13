@@ -40,7 +40,6 @@ impl<'a> PhaseNegAllData<'a> {
     pub fn groups(&self) -> &Vec<PhaseNegGroup> { &self.groups }
 }
 
-impl RuleSeal for PhaseNegAll { }
 impl RuleFinder for PhaseNegAll {
     type Output<'a> = PhaseNegAllData<'a>;
 
@@ -86,7 +85,6 @@ impl RuleFinder for PhaseNegAll {
     }
 }
 
-impl<'a> RuleSeal for PhaseNegAllData<'a> { }
 impl<'a> Rule for PhaseNegAllData<'a> {
     fn simplify(self) {
         let Self { dg, groups } = self;

@@ -23,7 +23,6 @@ pub struct IdentityData<'a> {
     pub(crate) kind: IdentityKind,
 }
 
-impl RuleSeal for Identity { }
 impl RuleFinder for Identity {
     type Output<'a> = IdentityData<'a>;
 
@@ -50,7 +49,6 @@ impl RuleFinder for Identity {
     }
 }
 
-impl<'a> RuleSeal for IdentityData<'a> { }
 impl<'a> Rule for IdentityData<'a> {
     fn simplify(self) {
         let Self { dg, kind } = self;

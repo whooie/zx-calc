@@ -16,7 +16,6 @@ pub struct ScalarPairData<'a> {
     pub(crate) n2: Option<(NodeId, usize)>, // (second node, mutual arity)
 }
 
-impl RuleSeal for ScalarPair { }
 impl RuleFinder for ScalarPair {
     type Output<'a> = ScalarPairData<'a>;
 
@@ -40,7 +39,6 @@ impl RuleFinder for ScalarPair {
     }
 }
 
-impl<'a> RuleSeal for ScalarPairData<'a> { }
 impl<'a> Rule for ScalarPairData<'a> {
     fn simplify(self) {
         use Node::*;

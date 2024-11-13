@@ -38,7 +38,6 @@ impl<'a> ScalarPairAllData<'a> {
     pub fn groups(&self) -> &Vec<BasicScalar> { &self.groups }
 }
 
-impl RuleSeal for ScalarPairAll { }
 impl RuleFinder for ScalarPairAll {
     type Output<'a> = ScalarPairAllData<'a>;
 
@@ -74,7 +73,6 @@ impl RuleFinder for ScalarPairAll {
     }
 }
 
-impl<'a> RuleSeal for ScalarPairAllData<'a> { }
 impl<'a> Rule for ScalarPairAllData<'a> {
     fn simplify(self) {
         use Node::*;

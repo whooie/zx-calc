@@ -33,7 +33,6 @@ impl<'a> HAbsorbAllData<'a> {
     pub fn groups(&self) -> &Vec<Vec<NodeId>> { &self.groups }
 }
 
-impl RuleSeal for HAbsorbAll { }
 impl RuleFinder for HAbsorbAll {
     type Output<'a> = HAbsorbAllData<'a>;
 
@@ -66,7 +65,6 @@ impl RuleFinder for HAbsorbAll {
     }
 }
 
-impl<'a> RuleSeal for HAbsorbAllData<'a> { }
 impl<'a> Rule for HAbsorbAllData<'a> {
     fn simplify(self) {
         let Self { dg, groups } = self;

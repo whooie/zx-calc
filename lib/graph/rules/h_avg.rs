@@ -20,7 +20,6 @@ pub struct HAvgData<'a> {
     pub(crate) z: (NodeId, Phase, usize),
 }
 
-impl RuleSeal for HAvg { }
 impl RuleFinder for HAvg {
     type Output<'a> = HAvgData<'a>;
 
@@ -47,7 +46,6 @@ impl RuleFinder for HAvg {
     }
 }
 
-impl<'a> RuleSeal for HAvgData<'a> { }
 impl<'a> Rule for HAvgData<'a> {
     fn simplify(self) {
         const EPSILON: f64 = 1e-12;

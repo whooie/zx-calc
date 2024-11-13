@@ -19,7 +19,6 @@ pub struct PiCommuteData<'a> {
     pub(crate) s2: NodeId,
 }
 
-impl RuleSeal for PiCommute { }
 impl RuleFinder for PiCommute {
     type Output<'a> = PiCommuteData<'a>;
 
@@ -42,7 +41,6 @@ impl RuleFinder for PiCommute {
     }
 }
 
-impl<'a> RuleSeal for PiCommuteData<'a> { }
 impl<'a> Rule for PiCommuteData<'a> {
     fn simplify(self) {
         let Self { dg, s1, s_pi, s2 } = self;

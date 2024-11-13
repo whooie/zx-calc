@@ -17,7 +17,6 @@ pub struct HFuseData<'a> {
     pub(crate) h2: NodeId, // empty end h-box
 }
 
-impl RuleSeal for HFuse { }
 impl RuleFinder for HFuse {
     type Output<'a> = HFuseData<'a>;
 
@@ -39,7 +38,6 @@ impl RuleFinder for HFuse {
     }
 }
 
-impl<'a> RuleSeal for HFuseData<'a> { }
 impl<'a> Rule for HFuseData<'a> {
     fn simplify(self) {
         const EPSILON: f64 = 1e-12;

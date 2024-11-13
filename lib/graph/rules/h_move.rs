@@ -17,7 +17,6 @@ pub struct HMoveData<'a> {
     pub(crate) s2: NodeId, // spider 2
 }
 
-impl RuleSeal for HMove { }
 impl RuleFinder for HMove {
     type Output<'a> = HMoveData<'a>;
 
@@ -39,7 +38,6 @@ impl RuleFinder for HMove {
     }
 }
 
-impl<'a> RuleSeal for HMoveData<'a> { }
 impl<'a> Rule for HMoveData<'a> {
     fn simplify(self) {
         let Self { dg, s1, h, s2 } = self;

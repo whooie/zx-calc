@@ -38,7 +38,6 @@ impl<'a> HExplodeAllData<'a> {
     pub fn groups(&self) -> &Vec<XHPair> { &self.groups }
 }
 
-impl RuleSeal for HExplodeAll { }
 impl RuleFinder for HExplodeAll {
     type Output<'a> = HExplodeAllData<'a>;
 
@@ -70,7 +69,6 @@ impl RuleFinder for HExplodeAll {
     }
 }
 
-impl<'a> RuleSeal for HExplodeAllData<'a> { }
 impl<'a> Rule for HExplodeAllData<'a> {
     fn simplify(self) {
         let Self { dg, groups } = self;

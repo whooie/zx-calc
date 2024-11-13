@@ -19,7 +19,6 @@ pub struct HEulerColorFlipData<'a> {
     pub(crate) ss_pi2: Vec<(NodeId, Phase, NodeId)>,
 }
 
-impl RuleSeal for HEulerColorFlip { }
 impl RuleFinder for HEulerColorFlip {
     type Output<'a> = HEulerColorFlipData<'a>;
 
@@ -60,7 +59,6 @@ impl RuleFinder for HEulerColorFlip {
     }
 }
 
-impl<'a> RuleSeal for HEulerColorFlipData<'a> { }
 impl<'a> Rule for HEulerColorFlipData<'a> {
     fn simplify(self) {
         let Self { dg, s, ss_pi2 } = self;

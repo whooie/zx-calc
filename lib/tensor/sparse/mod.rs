@@ -5,7 +5,7 @@ use ndarray as nd;
 use num_complex::Complex64 as C64;
 use thiserror::Error;
 use crate::phase::Phase;
-use super::{ ElementDataSeal, ElementData };
+use super::ElementData;
 
 #[derive(Debug, Error)]
 pub enum SpError {
@@ -38,7 +38,6 @@ impl From<C64> for Sp {
     }
 }
 
-impl ElementDataSeal for Sp { }
 impl ElementData for Sp {
     type Error = SpError;
     type InputIter<'a> = BraIndices<'a>;

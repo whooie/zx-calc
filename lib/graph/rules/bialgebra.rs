@@ -21,7 +21,6 @@ pub struct BialgebraData<'a> {
     pub(crate) x2: (NodeId, Phase, usize),
 }
 
-impl RuleSeal for Bialgebra { }
 impl RuleFinder for Bialgebra {
     type Output<'a> = BialgebraData<'a>;
 
@@ -41,7 +40,6 @@ impl RuleFinder for Bialgebra {
     }
 }
 
-impl<'a> RuleSeal for BialgebraData<'a> { }
 impl<'a> Rule for BialgebraData<'a> {
     fn simplify(self) {
         let Self { dg, z1, z2, x1, x2 } = self;

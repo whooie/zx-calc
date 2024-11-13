@@ -38,7 +38,6 @@ impl<'a> HStateMulAllData<'a> {
     pub fn groups(&self) -> &Vec<HStateMulGroup> { &self.groups }
 }
 
-impl RuleSeal for HStateMulAll { }
 impl RuleFinder for HStateMulAll {
     type Output<'a> = HStateMulAllData<'a>;
 
@@ -70,7 +69,6 @@ impl RuleFinder for HStateMulAll {
     }
 }
 
-impl<'a> RuleSeal for HStateMulAllData<'a> { }
 impl<'a> Rule for HStateMulAllData<'a> {
     fn simplify(self) {
         let Self { dg, groups } = self;

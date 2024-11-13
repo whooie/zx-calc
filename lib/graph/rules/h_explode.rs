@@ -17,7 +17,6 @@ pub struct HExplodeData<'a> {
     pub(crate) h: (NodeId, bool),
 }
 
-impl RuleSeal for HExplode { }
 impl RuleFinder for HExplode {
     type Output<'a> = HExplodeData<'a>;
 
@@ -40,7 +39,6 @@ impl RuleFinder for HExplode {
     }
 }
 
-impl<'a> RuleSeal for HExplodeData<'a> { }
 impl<'a> Rule for HExplodeData<'a> {
     fn simplify(self) {
         let Self { dg, x, h: (h, is_had) } = self;

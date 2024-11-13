@@ -19,7 +19,6 @@ pub struct HIntroData<'a> {
     pub(crate) z: (NodeId, bool), // (id, phase == 0)
 }
 
-impl RuleSeal for HIntro { }
 impl RuleFinder for HIntro {
     type Output<'a> = HIntroData<'a>;
 
@@ -52,7 +51,6 @@ impl RuleFinder for HIntro {
     }
 }
 
-impl<'a> RuleSeal for HIntroData<'a> { }
 impl<'a> Rule for HIntroData<'a> {
     fn simplify(self) {
         let Self { dg, x, h1, h2, z } = self;

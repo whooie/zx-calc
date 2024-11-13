@@ -26,12 +26,6 @@ pub(crate) fn snd<T, U>(pair: (T, U)) -> U { pair.1 }
 
 pub(crate) fn rev<T, U>(pair: (T, U)) -> (U, T) { (pair.1, pair.0) }
 
-/// `Rule` and `RuleFinder` are sealed traits to govern "rule types" -- we want
-/// to expose a modular, genericizable per-rule API, but restrict creation and
-/// use of the rules so that no invalid operations are performed on diagrams.
-pub(crate) mod private { pub trait RuleSeal { } }
-pub(crate) use private::RuleSeal;
-
 /// A trait for types that can explore a [`Diagram`] and find a particular
 /// structure to simplify.
 ///
@@ -43,7 +37,7 @@ pub(crate) use private::RuleSeal;
 /// diagrams; toward this purpose, all types created by this trait via
 /// [`find`][RuleFinder::find] (i.e. [`Self::Output`]) store a mutable reference
 /// to the diagram they will simplify.
-pub trait RuleFinder: private::RuleSeal {
+pub trait RuleFinder {
     /// The type representing the instantiated (but not executed) rewrite rule.
     type Output<'a>: Rule;
 
@@ -59,7 +53,7 @@ pub trait RuleFinder: private::RuleSeal {
 /// constructable as such (see [`RuleFinder`]) and store a mutable reference to
 /// the diagram they will simplify. (Further, no type implementing this trait
 /// implements [`Clone`] or [`Copy`].)
-pub trait Rule: private::RuleSeal {
+pub trait Rule {
     /// Execute the rewrite rule, consuming self and releasing the inner hold on
     /// the diagram.
     fn simplify(self);
@@ -163,7 +157,6 @@ pub enum Simplify {
     HStateMulAll,
 }
 
-impl private::RuleSeal for Simplify { }
 impl RuleFinder for Simplify {
     type Output<'a> = SimplifyData<'a>;
 
@@ -317,7 +310,6 @@ pub enum SimplifyData<'a> {
     HStateMulAll(HStateMulAllData<'a>),
 }
 
-impl<'a> private::RuleSeal for SimplifyData<'a> { }
 impl<'a> Rule for SimplifyData<'a> {
     fn simplify(self) {
         match self {

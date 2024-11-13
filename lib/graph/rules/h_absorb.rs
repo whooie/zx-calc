@@ -15,7 +15,6 @@ pub struct HAbsorbData<'a> {
     pub(crate) states: Vec<NodeId>, // pi x-spiders
 }
 
-impl RuleSeal for HAbsorb { }
 impl RuleFinder for HAbsorb {
     type Output<'a> = HAbsorbData<'a>;
 
@@ -41,7 +40,6 @@ impl RuleFinder for HAbsorb {
     }
 }
 
-impl<'a> RuleSeal for HAbsorbData<'a> { }
 impl<'a> Rule for HAbsorbData<'a> {
     fn simplify(self) {
         let Self { dg, states } = self;

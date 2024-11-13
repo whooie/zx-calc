@@ -21,7 +21,6 @@ pub struct IStateData<'a> {
     pub(crate) mb_spider: Option<NodeId>, // oppositely colored inner spider
 }
 
-impl RuleSeal for IState { }
 impl RuleFinder for IState {
     type Output<'a> = IStateData<'a>;
 
@@ -47,7 +46,6 @@ impl RuleFinder for IState {
     }
 }
 
-impl<'a> RuleSeal for IStateData<'a> { }
 impl<'a> Rule for IStateData<'a> {
     fn simplify(self) {
         let Self { dg, state, mb_spider } = self;

@@ -15,7 +15,6 @@ pub struct H2HopfData<'a> {
     pub(crate) s2: NodeId, // spider 2
 }
 
-impl RuleSeal for H2Hopf { }
 impl RuleFinder for H2Hopf {
     type Output<'a> = H2HopfData<'a>;
 
@@ -41,7 +40,6 @@ impl RuleFinder for H2Hopf {
     }
 }
 
-impl<'a> RuleSeal for H2HopfData<'a> { }
 impl<'a> Rule for H2HopfData<'a> {
     fn simplify(self) {
         let Self { dg, s1, s2 } = self;

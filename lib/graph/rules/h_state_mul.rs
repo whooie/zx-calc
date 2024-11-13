@@ -18,7 +18,6 @@ pub struct HStateMulData<'a> {
     pub(crate) hh: Vec<(NodeId, C64)>, // h-boxes
 }
 
-impl RuleSeal for HStateMul { }
 impl RuleFinder for HStateMul {
     type Output<'a> = HStateMulData<'a>;
 
@@ -44,7 +43,6 @@ impl RuleFinder for HStateMul {
     }
 }
 
-impl<'a> RuleSeal for HStateMulData<'a> { }
 impl<'a> Rule for HStateMulData<'a> {
     fn simplify(self) {
         let Self { dg, s, mut hh } = self;

@@ -24,7 +24,6 @@ impl<'a> FuseData<'a> {
     pub fn ids(&self) -> (NodeId, NodeId) { (self.s1, self.s2) }
 }
 
-impl RuleSeal for Fuse { }
 impl RuleFinder for Fuse {
     type Output<'a> = FuseData<'a>;
 
@@ -50,7 +49,6 @@ impl RuleFinder for Fuse {
     }
 }
 
-impl<'a> RuleSeal for FuseData<'a> { }
 impl<'a> Rule for FuseData<'a> {
     fn simplify(self) {
         let Self { dg, s1, s2 } = self;

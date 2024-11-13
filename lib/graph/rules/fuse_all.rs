@@ -42,7 +42,6 @@ impl<'a> FuseAllData<'a> {
     pub fn groups(&self) -> &Vec<SpiderGroup> { &self.groups }
 }
 
-impl RuleSeal for FuseAll { }
 impl RuleFinder for FuseAll {
     type Output<'a> = FuseAllData<'a>;
 
@@ -86,7 +85,6 @@ impl RuleFinder for FuseAll {
     }
 }
 
-impl<'a> RuleSeal for FuseAllData<'a> { }
 impl<'a> Rule for FuseAllData<'a> {
     fn simplify(self) {
         let Self { dg, groups } = self;

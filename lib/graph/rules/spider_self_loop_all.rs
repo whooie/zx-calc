@@ -28,7 +28,6 @@ impl<'a> SpiderSelfLoopAllData<'a> {
     pub fn groups(&self) -> &Vec<NodeId> { &self.spiders }
 }
 
-impl RuleSeal for SpiderSelfLoopAll { }
 impl RuleFinder for SpiderSelfLoopAll {
     type Output<'a> = SpiderSelfLoopAllData<'a>;
 
@@ -47,7 +46,6 @@ impl RuleFinder for SpiderSelfLoopAll {
     }
 }
 
-impl<'a> RuleSeal for SpiderSelfLoopAllData<'a> { }
 impl<'a> Rule for SpiderSelfLoopAllData<'a> {
     fn simplify(self) {
         let Self { dg, spiders } = self;

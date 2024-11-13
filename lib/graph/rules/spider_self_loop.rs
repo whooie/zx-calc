@@ -14,7 +14,6 @@ pub struct SpiderSelfLoopData<'a> {
     pub(crate) s: NodeId, // spider
 }
 
-impl RuleSeal for SpiderSelfLoop { }
 impl RuleFinder for SpiderSelfLoop {
     type Output<'a> = SpiderSelfLoopData<'a>;
 
@@ -30,7 +29,6 @@ impl RuleFinder for SpiderSelfLoop {
     }
 }
 
-impl<'a> RuleSeal for SpiderSelfLoopData<'a> { }
 impl<'a> Rule for SpiderSelfLoopData<'a> {
     fn simplify(self) {
         let SpiderSelfLoopData { dg, s } = self;

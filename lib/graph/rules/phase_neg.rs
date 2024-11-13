@@ -17,7 +17,6 @@ pub struct PhaseNegData<'a> {
     pub(crate) ss_pi: Vec<(NodeId, NodeId)>, // [(pi spider, neighbor)]
 }
 
-impl RuleSeal for PhaseNeg { }
 impl RuleFinder for PhaseNeg {
     type Output<'a> = PhaseNegData<'a>;
 
@@ -49,7 +48,6 @@ impl RuleFinder for PhaseNeg {
     }
 }
 
-impl<'a> RuleSeal for PhaseNegData<'a> { }
 impl<'a> Rule for PhaseNegData<'a> {
     fn simplify(self) {
         let Self { dg, s, ss_pi } = self;

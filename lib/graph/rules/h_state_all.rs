@@ -30,7 +30,6 @@ impl<'a> HStateAllData<'a> {
     pub fn groups(&self) -> &Vec<(NodeId, C64)> { &self.hh }
 }
 
-impl RuleSeal for HStateAll { }
 impl RuleFinder for HStateAll {
     type Output<'a> = HStateAllData<'a>;
 
@@ -58,7 +57,6 @@ impl RuleFinder for HStateAll {
     }
 }
 
-impl<'a> RuleSeal for HStateAllData<'a> { }
 impl<'a> Rule for HStateAllData<'a> {
     fn simplify(self) {
         const EPSILON: f64 = 1e-12;

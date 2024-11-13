@@ -36,7 +36,6 @@ impl<'a> StateCopyAllData<'a> {
     pub fn pairs(&self) -> &Vec<StateCopyPair> { &self.pairs }
 }
 
-impl RuleSeal for StateCopyAll { }
 impl RuleFinder for StateCopyAll {
     type Output<'a> = StateCopyAllData<'a>;
 
@@ -65,7 +64,6 @@ impl RuleFinder for StateCopyAll {
     }
 }
 
-impl<'a> RuleSeal for StateCopyAllData<'a> { }
 impl<'a> Rule for StateCopyAllData<'a> {
     fn simplify(self) {
         let Self { dg, pairs } = self;

@@ -29,7 +29,6 @@ impl<'a> HMultiStateAllData<'a> {
     pub fn groups(&self) -> &Vec<NodeId> { &self.hh }
 }
 
-impl RuleSeal for HMultiStateAll { }
 impl RuleFinder for HMultiStateAll {
     type Output<'a> = HMultiStateAllData<'a>;
 
@@ -54,7 +53,6 @@ impl RuleFinder for HMultiStateAll {
     }
 }
 
-impl<'a> RuleSeal for HMultiStateAllData<'a> { }
 impl<'a> Rule for HMultiStateAllData<'a> {
     fn simplify(self) {
         let Self { dg, hh } = self;
