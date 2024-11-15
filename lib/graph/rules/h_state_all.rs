@@ -1,5 +1,5 @@
 use num_complex::Complex64 as C64;
-use crate::phase::Phase;
+use crate::{ c64_eq, phase::Phase };
 use super::*;
 
 /// Convert all unary H-boxes into unary Z-spiders.
@@ -14,12 +14,16 @@ pub struct HStateAll;
 
 /// Output of [`HStateAll::find`].
 #[derive(Debug)]
-pub struct HStateAllData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HStateAllData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) hh: Vec<(NodeId, C64)>,
 }
 
-impl<'a> HStateAllData<'a> {
+impl<'a, A> HStateAllData<'a, A>
+where A: DiagramData
+{
     /// Return the number of unary H-boxes found with argument ±1.
     pub fn len(&self) -> usize { self.hh.len() }
 
@@ -30,23 +34,23 @@ impl<'a> HStateAllData<'a> {
     pub fn groups(&self) -> &Vec<(NodeId, C64)> { &self.hh }
 }
 
-impl RuleFinder for HStateAll {
-    type Output<'a> = HStateAllData<'a>;
+impl RuleFinder<ZH> for HStateAll {
+    type Output<'a> = HStateAllData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
-        const EPSILON: f64 = 1e-12;
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         const I: C64 = C64 { re: 0.0, im: 1.0 };
         let mut hh: Vec<(NodeId, C64)> = Vec::new();
         for (id, node) in dg.nodes_inner() {
-            if node.is_h() && dg.arity(id).unwrap() == 1 {
+            if node.is_h() && dg.arity(id).unwrap() == 1
+                && (
+                    node.has_arg(1.0)
+                    || node.has_arg(-1.0)
+                    || node.has_arg(I)
+                    || node.has_arg(-I)
+                )
+            {
                 let arg = node.arg().unwrap();
-                if (arg + 1.0).norm() < EPSILON
-                    || (arg - 1.0).norm() < EPSILON
-                    || (arg + I).norm() < EPSILON
-                    || (arg - I).norm() < EPSILON
-                {
-                    hh.push((id, arg));
-                }
+                hh.push((id, arg));
             }
         }
         if hh.is_empty() {
@@ -57,24 +61,23 @@ impl RuleFinder for HStateAll {
     }
 }
 
-impl<'a> Rule for HStateAllData<'a> {
+impl<'a> Rule<ZH> for HStateAllData<'a, ZH> {
     fn simplify(self) {
-        const EPSILON: f64 = 1e-12;
         const I: C64 = C64 { re: 0.0, im: 1.0 };
         let Self { dg, hh } = self;
         for (h, arg) in hh.into_iter() {
             let ph =
-                if (arg + 1.0).norm() < EPSILON {
+                if c64_eq(arg, -1.0) {
                     Phase::pi()
-                } else if (arg - 1.0).norm() < EPSILON {
+                } else if c64_eq(arg, 1.0) {
                     Phase::zero()
-                } else if (arg + I).norm() < EPSILON {
+                } else if c64_eq(arg, -I) {
                     -Phase::pi2()
                 } else {
                     Phase::pi()
                 };
             let n = dg.get_node_mut(h).unwrap();
-            *n = Node::Z(ph);
+            *n = ZHNode::Z(ph);
         }
     }
 }

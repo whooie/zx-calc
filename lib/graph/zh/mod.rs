@@ -1,10 +1,30 @@
-//! Base ZX-calculus containing only Z- and X-spiders, and H-boxes strictly
-//! conforming to the usual Hadamard gate.
+//! Variant of the ZX-calculus based on generalization of the H-box.
+//!
+#![cfg_attr(
+    feature = "doc-images",
+    cfg_attr(
+        all(),
+        doc = ::embed_doc_image::embed_image!("h_box_def", "assets/h_box_def.svg"),
+    )
+)]
+#![cfg_attr(
+    not(feature = "doc-images"),
+    doc = "**Doc images are not enabled**. Compile with feature `doc-images` and Rust version >= 1.54 to enable."
+)]
+//!
+//! Here, the usual generator describing the Hadamard transformation is
+//! generalized to arbitrary arity and given an argument, as follows:
+//!
+//! ![h_box_def][h_box_def]
+//!
+//! Note that in the case where *n* + *m* = 2 and *a* = –1, an extra scalar
+//! factor of 1/√2 is added so that the H-box coincides with the usual
+//! definition of the Hadamard gate.
 
-use std::{ /*collections::VecDeque,*/ fs, io::Write, path::Path };
+use std::{ collections::VecDeque, fs, io::Write, path::Path };
 use num_complex::Complex64 as C64;
 use crate::{
-    graph2::{
+    graph::{
         GraphError,
         GraphResult,
         Diagram,
@@ -13,31 +33,28 @@ use crate::{
         NodeId,
         QubitId,
         Spider,
-        // WireData,
-        // WireStore,
+        WireData,
+        WireStore,
     },
     phase::Phase,
 };
 
 use GraphError::*;
 
-pub(crate) mod zxnode;
-pub use zxnode::*;
+pub(crate) mod zhnode;
+pub use zhnode::*;
 
-pub(crate) mod zxwire;
-pub use zxwire::*;
-
-/// Marker type for diagrams in the ZX-calculus.
+/// Marker type for diagrams in the ZH-calculus.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ZX;
+pub struct ZH;
 
-impl DiagramData for ZX {
-    type Node = ZXNode;
-    type Wire = ZXWire;
+impl DiagramData for ZH {
+    type Node = ZHNode;
+    type Wire = NodeId;
     type Scalar = C64;
 }
 
-impl Diagram<ZX> {
+impl Diagram<ZH> {
     /// Return the number of Z-spiders.
     pub fn count_z(&self) -> usize {
         self.nodes.iter().filter(|mb_n| mb_n.is_some_and(|n| n.is_z())).count()
@@ -48,9 +65,9 @@ impl Diagram<ZX> {
         self.nodes.iter().filter(|mb_n| mb_n.is_some_and(|n| n.is_x())).count()
     }
 
-    /// Return the number of Hadamard wires.
+    /// Return the number of H-boxes.
     pub fn count_h(&self) -> usize {
-        self.wires().filter(|(_, w)| w.is_h()).count()
+        self.nodes.iter().filter(|mb_n| mb_n.is_some_and(|n| n.is_h())).count()
     }
 
     /// Return the total number of spiders.
@@ -64,176 +81,21 @@ impl Diagram<ZX> {
     ///
     /// `phase` defaults to 0.
     pub fn add_z(&mut self, phase: Option<Phase>) -> NodeId {
-        self.add_node(ZXNode::Z(phase.unwrap_or_else(Phase::zero)))
+        self.add_node(ZHNode::Z(phase.unwrap_or_else(Phase::zero)))
     }
 
     /// Add an X-spider to the diagram and return its ID.
     ///
     /// `phase` defaults to 0.
     pub fn add_x(&mut self, phase: Option<Phase>) -> NodeId {
-        self.add_node(ZXNode::X(phase.unwrap_or_else(Phase::zero)))
+        self.add_node(ZHNode::X(phase.unwrap_or_else(Phase::zero)))
     }
 
-    /// Get the number of empty wires attached to a node, if it exists.
-    pub fn arity_e(&self, id: NodeId) -> Option<usize> {
-        self.wires.get(id)
-            .and_then(|mb_nnb| {
-                mb_nnb.as_ref()
-                    .map(|nnb| nnb.iter().filter(|nb| nb.is_e()).count())
-            })
-    }
-
-    /// Get the number of Hadamard wires attached to a node, if it exists.
-    pub fn arity_h(&self, id: NodeId) -> Option<usize> {
-        self.wires.get(id)
-            .and_then(|mb_nnb| {
-                mb_nnb.as_ref()
-                    .map(|nnb| nnb.iter().filter(|nb| nb.is_h()).count())
-            })
-    }
-
-    /// Get the number of empty wires connecting two nodes, if they both exist.
-    pub fn mutual_arity_e(&self, a: NodeId, b: NodeId) -> Option<usize> {
-        self.has_node(b).then_some(())?;
-        self.wires.get(a)
-            .and_then(|mb_nnb| {
-                mb_nnb.as_ref()
-                    .map(|nnb| {
-                        let ma =
-                            nnb.iter().filter(|wire| wire.has_e_id(b)).count();
-                        if a == b { ma / 2 } else { ma }
-                    })
-            })
-    }
-
-    /// Get the number of Hadamard wires connecting two nodes, if they both
-    /// exist.
-    pub fn mutual_arity_h(&self, a: NodeId, b: NodeId) -> Option<usize> {
-        self.has_node(b).then_some(())?;
-        self.wires.get(a)
-            .and_then(|mb_nnb| {
-                mb_nnb.as_ref()
-                    .map(|nnb| {
-                        let ma =
-                            nnb.iter().filter(|wire| wire.has_h_id(b)).count();
-                        if a == b { ma / 2 } else { ma }
-                    })
-            })
-    }
-
-    /// Remove all or at most a fixed number of empty wires between two nodes.
+    /// Add an H-box to the diagram and return its ID.
     ///
-    /// Returns the number of wires removed.
-    ///
-    /// Fails if either node does not exist.
-    pub fn remove_wires_e(
-        &mut self,
-        a: NodeId,
-        b: NodeId,
-        nwires: Option<usize>,
-    ) -> GraphResult<usize>
-    {
-        self.has_node(a).then_some(())
-            .ok_or(RemoveWireMissingNode(a))?;
-        self.has_node(b).then_some(())
-            .ok_or(RemoveWireMissingNode(b))?;
-
-        let mut to_remove: Vec<usize> = Vec::new();
-
-        let nnb_a = self.get_neighbors_mut(a).unwrap();
-        let len_nnb_a = nnb_a.len();
-        nnb_a.iter().enumerate()
-            .filter_map(|(k, nid)| nid.has_e_id(b).then_some(k))
-            .take(nwires.unwrap_or(len_nnb_a))
-            .for_each(|k| { to_remove.push(k); });
-        let mut removed_a = to_remove.len();
-        to_remove.drain(..).rev()
-            .for_each(|k| { nnb_a.swap_remove(k); });
-
-        let nnb_b = self.get_neighbors_mut(b).unwrap();
-        let len_nnb_b = nnb_b.len();
-        nnb_b.iter().enumerate()
-            .filter_map(|(k, nid)| nid.has_e_id(a).then_some(k))
-            .take(nwires.unwrap_or(len_nnb_b))
-            .for_each(|k| { to_remove.push(k); });
-        let removed_b = to_remove.len();
-        to_remove.drain(..).rev()
-            .for_each(|k| { nnb_b.swap_remove(k); });
-
-        debug_assert!(removed_a == removed_b || a == b);
-        if a == b { removed_a /= 2; }
-        self.wire_count -= removed_a;
-        Ok(removed_a)
-    }
-
-    /// Remove all or at most a fixed number of Hadamard wires between two
-    /// nodes.
-    ///
-    /// Returns the number of wires removed.
-    ///
-    /// Fails if either node does not exist.
-    pub fn remove_wires_h(
-        &mut self,
-        a: NodeId,
-        b: NodeId,
-        nwires: Option<usize>,
-    ) -> GraphResult<usize>
-    {
-        self.has_node(a).then_some(())
-            .ok_or(RemoveWireMissingNode(a))?;
-        self.has_node(b).then_some(())
-            .ok_or(RemoveWireMissingNode(b))?;
-
-        let mut to_remove: Vec<usize> = Vec::new();
-
-        let nnb_a = self.get_neighbors_mut(a).unwrap();
-        let len_nnb_a = nnb_a.len();
-        nnb_a.iter().enumerate()
-            .filter_map(|(k, nid)| nid.has_h_id(b).then_some(k))
-            .take(nwires.unwrap_or(len_nnb_a))
-            .for_each(|k| { to_remove.push(k); });
-        let mut removed_a = to_remove.len();
-        to_remove.drain(..).rev()
-            .for_each(|k| { nnb_a.swap_remove(k); });
-
-        let nnb_b = self.get_neighbors_mut(b).unwrap();
-        let len_nnb_b = nnb_b.len();
-        nnb_b.iter().enumerate()
-            .filter_map(|(k, nid)| nid.has_h_id(a).then_some(k))
-            .take(nwires.unwrap_or(len_nnb_b))
-            .for_each(|k| { to_remove.push(k); });
-        let removed_b = to_remove.len();
-        to_remove.drain(..).rev()
-            .for_each(|k| { nnb_b.swap_remove(k); });
-
-        debug_assert!(removed_a == removed_b || a == b);
-        if a == b { removed_a /= 2; }
-        self.wire_count -= removed_a;
-        Ok(removed_a)
-    }
-
-    /// Add a Hadamard wire between two nodes.
-    ///
-    /// Fails if one or neither of the nodes exist.
-    pub fn add_wire_h(&mut self, a: NodeId, b: NodeId) -> GraphResult<()> {
-        self.get_node(a)
-            .ok_or(AddWireMissingNode(a))
-            .and_then(|node| {
-                (node.is_generator() || !self.is_connected(a).unwrap())
-                    .then_some(())
-                    .ok_or(AddWireConnectedIO(a))
-            })?;
-        self.get_node(b)
-            .ok_or(AddWireMissingNode(b))
-            .and_then(|node| {
-                (node.is_generator() || !self.is_connected(b).unwrap())
-                    .then_some(())
-                    .ok_or(AddWireConnectedIO(b))
-            })?;
-        self.wires[a].as_mut().unwrap().push(ZXWire::H(b));
-        self.wires[b].as_mut().unwrap().push(ZXWire::H(a));
-        self.wire_count += 1;
-        Ok(())
+    /// `arg` defaults to –1.
+    pub fn add_h(&mut self, arg: Option<C64>) -> NodeId {
+        self.add_node(ZHNode::H(arg.unwrap_or_else(|| -C64::from(1.0))))
     }
 
     /// Add a wire with an attached input spider state to a pre-existing node
@@ -327,6 +189,172 @@ impl Diagram<ZX> {
         self.get_output_id(q)
             .ok_or(ApplyStateMissingQubit(q))
             .and_then(|nid| self.apply_state(nid.id(), spider))
+    }
+
+    // BFS explore from a given starting queue, accumulating a list of tensor
+    // elements
+    fn element_explore<'a, T>(
+        &'a self,
+        wire_nums: &WireStore,
+        visited: &mut Vec<NodeId>,
+        to_visit: &mut VecDeque<(NodeId, &'a ZHNode)>,
+        elements: &mut Vec<crate::tensor::Element<T>>,
+    )
+    where T: crate::tensor::ElementData
+    {
+        use crate::tensor;
+        // upper bound on possible qubit indices
+        let qcount = self.inputs.len().max(self.outputs.len());
+        // want wire IDs to line up with qubit indices when connected to
+        // inputs/outputs, so shift any ID that could be a qubit ID by the total
+        // wire count
+        let nonq_wire = |id: usize| -> usize {
+            if id < qcount { self.wire_count + id } else { id }
+        };
+        // self-loops are treated as inputs to a Bell effect, whose input wire
+        // IDs are shifted to come after all existing (possibly shifted) wires
+        let mut bell_wire = self.wire_count + qcount..;
+
+        // loop variables
+        let mut ins: Vec<usize> = Vec::new(); // inputs to an element
+        let mut outs: Vec<usize> = Vec::new(); // outputs from an element
+        let mut bell_wires: Vec<(usize, usize)> = Vec::new(); // for self-loop wires
+        let mut empty_wires: Vec<(QubitId, QubitId)> = Vec::new(); // direct input-to-output
+        while let Some((id, node)) = to_visit.pop_back() {
+            visited.push(id);
+            for (id2, node2) in self.neighbors(id).unwrap() {
+                let id2 = id2.id();
+                // self-loops
+                if id2 == id {
+                    let b1 = bell_wire.next().unwrap();
+                    let b2 = bell_wire.next().unwrap();
+                    outs.push(b1);
+                    outs.push(b2);
+                    bell_wires.push((b1, b2));
+                    continue;
+                }
+                // empty wires
+                if node.is_input() && node2.is_output() {
+                    visited.push(id2);
+                    let qin = self.get_input_index(id).unwrap();
+                    let qout = self.get_output_index(id2).unwrap();
+                    empty_wires.push((qin, qout));
+                    continue;
+                }
+                // everything else
+                if !visited.contains(&id2)
+                    && !to_visit.contains(&(id2, node2))
+                {
+                    to_visit.push_front((id2, node2));
+                }
+                if !node.is_generator() { break; }
+                if node2.is_input() {
+                    let qin = self.get_input_index(id2).unwrap();
+                    ins.push(qin);
+                } else if !node2.is_output() && visited.contains(&id2) {
+                    wire_nums.get(id, id2).unwrap().iter()
+                        .for_each(|wid| { ins.push(nonq_wire(*wid)); });
+                } else if node2.is_output() {
+                    let qout = self.get_output_index(id2).unwrap();
+                    outs.push(qout);
+                } else if !visited.contains(&id2) {
+                    wire_nums.get(id, id2).unwrap().iter()
+                        .for_each(|wid| { outs.push(nonq_wire(*wid)); });
+                }
+            }
+            if node.is_generator() {
+                elements.push(node.to_element(&ins, &outs));
+            }
+            if !bell_wires.is_empty() {
+                for (b1, b2) in bell_wires.drain(..) {
+                    elements.push(tensor::Element::cap(b1, b2));
+                }
+            }
+            ins.clear();
+            outs.clear();
+        }
+        // empty wires may include swaps, which have to be dealt with
+        //
+        // individual swaps are be determined by sorting on input wire indices,
+        // and then finding the swaps required to sort the output wire indices
+        if !empty_wires.is_empty() {
+            empty_wires.sort_by(|(qin_l, _), (qin_r, _)| qin_l.cmp(qin_r));
+            let (idents_in, mut idents_out): (Vec<QubitId>, Vec<QubitId>) =
+                empty_wires.into_iter().unzip();
+            let mut swaps: Vec<tensor::Element<T>> = Vec::new();
+            let mut mb_mismatch: Option<(usize, (&QubitId, &QubitId))>;
+            loop {
+                mb_mismatch =
+                    idents_in.iter().zip(idents_out.iter()).enumerate()
+                    .find(|(_, (qin, qout))| qin != qout);
+                if let Some((k, (qin, qswap))) = mb_mismatch {
+                    let (kswap, _) =
+                        idents_out.iter().enumerate()
+                        .find(|(_, qout)| qin == *qout)
+                        .unwrap();
+                    swaps.push(tensor::Element::swap(*qin, *qswap));
+                    idents_out.swap(k, kswap);
+                } else {
+                    break;
+                }
+            }
+            swaps.reverse();
+            elements.append(&mut swaps);
+        }
+    }
+
+    /// Convert `self` to a [`tensor::Diagram`][crate::tensor::Diagram]
+    /// representation.
+    pub fn to_tensor<T>(&self) -> crate::tensor::Diagram<T>
+    where T: crate::tensor::ElementData
+    {
+        use crate::tensor;
+        // assemble the tensor diagram by iterating over nodes and analyzing
+        // input/output wires relative to what's already been seen
+        //
+        // have to BFS explore starting from the input nodes in order to ensure
+        // that input-adjencent nodes are placed first in the tensor diagram
+        //
+        // we also want to have wire numbers in the tensor diagram line up with
+        // qubit indices for convenience, so if a given wire id (normally used
+        // as-is for a tensor wire index) coincides with a possible qubit index,
+        // shift it by the maximum wire id in the (graph) diagram
+        //
+        // do this in two steps because nodes with paths to inputs/outputs need
+        // to be visited in a special order, but everything else (i.e. part of a
+        // scalar) doesn't
+        //
+        // self-wires are dealt with by adding two extra outgoing wires
+        // immediately coupled to a spiderless Bell effect
+
+        // tensor accumulator
+        let mut elements: Vec<tensor::Element<T>> = Vec::new();
+        // have to index wires so that each one can have a unique ID in the
+        // tensor diagram
+        let wire_nums: WireStore =
+            self.wires().map(|(l, r)| (l, r.id())).collect();
+
+        // first step: all non-scalar nodes
+        let mut visited: Vec<NodeId> = Vec::with_capacity(self.node_count);
+        // init with input nodes to make sure they're seen first
+        let mut to_visit: VecDeque<(NodeId, &ZHNode)> =
+            self.inputs()
+            .map(|(_, ioid)| ioid.id())
+            .map(|nid| (nid, self.get_node(nid).unwrap()))
+            .collect();
+        self.element_explore(
+            &wire_nums, &mut visited, &mut to_visit, &mut elements);
+
+        // second step: all nodes that aren't part of a scalar
+        // reset `to_visit` with everything not already visited
+        to_visit
+            = self.nodes_inner()
+            .filter(|(id, _)| !visited.contains(id))
+            .collect();
+        self.element_explore(
+            &wire_nums, &mut visited, &mut to_visit, &mut elements);
+
+        tensor::Diagram::new(elements, Some(self.scalar))
     }
 
     /// Return an object containing an encoding of `self` in the [DOT
@@ -475,24 +503,11 @@ impl Diagram<ZX> {
         }
         // add wires
         for (left, right) in self.wires() {
-            match *right {
-                ZXWire::E(r) => {
-                    statements =
-                        statements.add_edge(
-                            Edge::head_node(left.into(), None)
-                            .line_to_node(r.into(), None)
-                        );
-                },
-                ZXWire::H(r) => {
-                    statements =
-                        statements.add_edge(
-                            Edge::head_node(left.into(), None)
-                            .line_to_node(r.into(), None)
-                            .add_attrpair(style(Style::Dashed))
-                            .add_attrpair(color(H_WIRE))
-                        );
-                },
-            }
+            statements =
+                statements.add_edge(
+                    Edge::head_node(left.into(), None)
+                    .line_to_node(right.id().into(), None)
+                );
         }
         let graphviz =
             GraphBuilder::default()

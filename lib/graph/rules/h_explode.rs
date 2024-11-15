@@ -11,26 +11,28 @@ pub struct HExplode;
 
 /// Output of [`HExplode::find`].
 #[derive(Debug)]
-pub struct HExplodeData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HExplodeData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) x: NodeId,
     pub(crate) h: (NodeId, bool),
 }
 
-impl RuleFinder for HExplode {
-    type Output<'a> = HExplodeData<'a>;
+impl RuleFinder<ZH> for HExplode {
+    type Output<'a> = HExplodeData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         let zero = Phase::zero();
         for (id, node) in dg.nodes_inner() {
             if node.is_x_and(|ph| ph == zero) && dg.arity(id).unwrap() == 1 {
                 let mb_h =
-                    dg.neighbors_of(id).unwrap()
+                    dg.neighbors(id).unwrap()
                     .find(|(_, node2)| node2.is_h());
                 if let Some((id2, node2)) = mb_h {
                     let is_had =
-                        dg.arity(id2).unwrap() == 2 && node2.has_defarg();
-                    let h = (id2, is_had);
+                        dg.arity(*id2).unwrap() == 2 && node2.has_defarg();
+                    let h = (*id2, is_had);
                     return Some(HExplodeData { dg, x: id, h });
                 }
             }
@@ -39,13 +41,13 @@ impl RuleFinder for HExplode {
     }
 }
 
-impl<'a> Rule for HExplodeData<'a> {
+impl<'a> Rule<ZH> for HExplodeData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, x, h: (h, is_had) } = self;
         dg.remove_node(x).unwrap();
         if is_had {
             let n = dg.get_node_mut(h).unwrap();
-            *n = Node::z();
+            *n = ZHNode::z();
         } else {
             let (_, nnb) = dg.remove_node_nb(h).unwrap();
             for nb in nnb.into_iter() {
@@ -53,7 +55,7 @@ impl<'a> Rule for HExplodeData<'a> {
                     dg.scalar *= 2.0;
                     continue;
                 }
-                let z = dg.add_node(Node::z());
+                let z = dg.add_node(ZHNode::z());
                 dg.add_wire(z, nb).unwrap();
             }
             dg.scalar *= std::f64::consts::SQRT_2;

@@ -9,30 +9,19 @@ pub struct HMultiState;
 
 /// Output of [`HMultiState::find`].
 #[derive(Debug)]
-pub struct HMultiStateData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HMultiStateData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) h: NodeId,
 }
 
-// Note that self-wires are not important here, since we demand arg == 1 which
-// is a fixed point of the usual self-wire argument transformation
-//
-//      a -> 1 + (a - 1) / 2^n
-//
-// (See `HSelfLoop`.)
+impl RuleFinder<ZH> for HMultiState {
+    type Output<'a> = HMultiStateData<'a, ZH>;
 
-impl RuleFinder for HMultiState {
-    type Output<'a> = HMultiStateData<'a>;
-
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
-        const EPSILON: f64 = 1e-12;
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         for (id, node) in dg.nodes_inner() {
-            let non_self_arity =
-                dg.arity(id).unwrap()
-                - dg.mutual_arity(id, id).unwrap();
-            if node.is_h_and(|arg| (arg + 1.0).norm() < EPSILON)
-                && non_self_arity > 1
-            {
+            if node.has_arg(1.0) && dg.arity(id).unwrap() > 0 {
                 return Some(HMultiStateData { dg, h: id });
             }
         }
@@ -40,16 +29,21 @@ impl RuleFinder for HMultiState {
     }
 }
 
-impl<'a> Rule for HMultiStateData<'a> {
+impl<'a> Rule<ZH> for HMultiStateData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, h } = self;
         let (_, nnb) = dg.remove_node_nb(h).unwrap();
+        let mut self_loops_x2: i32 = 0;
         nnb.into_iter()
-            .filter(|nb| *nb != h)
             .for_each(|nb| {
-                let z = dg.add_node(Node::z());
-                dg.add_wire(z, nb).unwrap();
+                if nb == h {
+                    self_loops_x2 += 1;
+                } else {
+                    let z = dg.add_node(ZHNode::z());
+                    dg.add_wire(z, nb).unwrap();
+                }
             });
+        dg.scalar *= 2.0_f64.powi(self_loops_x2 / 2);
     }
 }
 

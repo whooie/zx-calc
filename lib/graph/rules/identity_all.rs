@@ -13,13 +13,17 @@ pub struct IdentityAll;
 
 /// Output of [`IdentityAll::find`].
 #[derive(Debug)]
-pub struct IdentityAllData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct IdentityAllData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     // all identities; guaranteed non-overlapping
     pub(crate) idents: Vec<IdentityKind>,
 }
 
-impl<'a> IdentityAllData<'a> {
+impl<'a, A> IdentityAllData<'a, A>
+where A: DiagramData
+{
     /// Return the number of identity groups found.
     ///
     /// All groups are guaranteed to be disconnected from each other.
@@ -32,11 +36,67 @@ impl<'a> IdentityAllData<'a> {
     pub fn groups(&self) -> &Vec<IdentityKind> { &self.idents }
 }
 
-impl RuleFinder for IdentityAll {
-    type Output<'a> = IdentityAllData<'a>;
+impl RuleFinder<ZX> for IdentityAll {
+    type Output<'a> = IdentityAllData<'a, ZX>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
-        let mut seen: Vec<NodeId> = Vec::with_capacity(dg.node_count);
+    fn find(self, dg: &mut Diagram<ZX>) -> Option<Self::Output<'_>> {
+        let mut seen: Vec<NodeId> = Vec::new();
+        let mut idents: Vec<IdentityKind> = Vec::new();
+        for (id, node) in dg.nodes_inner() {
+            if seen.contains(&id) {
+                continue;
+            } else {
+                seen.push(id);
+            }
+            if node.has_defarg()
+                && dg.arity(id).unwrap() == 2
+                && dg.neighbor_ids(id).unwrap()
+                    .all(|nb| !seen.contains(&nb.id()))
+                && (
+                    dg.arity_e(id).unwrap() == 2
+                    || (
+                        dg.arity_h(id).unwrap() == 2
+                        && dg.mutual_arity(id, id).unwrap() == 0
+                    )
+                )
+            {
+                idents.push(IdentityKind::Spider(id));
+            }
+        }
+        if idents.is_empty() {
+            None
+        } else {
+            Some(IdentityAllData { dg, idents })
+        }
+    }
+}
+
+impl<'a> Rule<ZX> for IdentityAllData<'a, ZX> {
+    fn simplify(self) {
+        let Self { dg, idents } = self;
+        for kind in idents.into_iter() {
+            let IdentityKind::Spider(s) = kind else { unreachable!() };
+            let mut nb_iter = dg.neighbor_ids(s).unwrap().copied();
+            let nb1 = nb_iter.next().unwrap();
+            if let Some(nb2) = nb_iter.next() {
+                // not a self-neighbor
+                dg.remove_node(s).unwrap();
+                dg.add_wire(nb1.id(), nb2.id()).unwrap();
+            } else {
+                // self-neighbor
+                assert_eq!(nb1.id(), s);
+                dg.remove_node(s).unwrap();
+                dg.scalar *= if nb1.is_h() { 0.0 } else { 2.0 };
+            }
+        }
+    }
+}
+
+impl RuleFinder<ZH> for IdentityAll {
+    type Output<'a> = IdentityAllData<'a, ZH>;
+
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
+        let mut seen: Vec<NodeId> = Vec::new();
         let mut idents: Vec<IdentityKind> = Vec::new();
         for (id, node) in dg.nodes_inner() {
             if seen.contains(&id) {
@@ -48,14 +108,14 @@ impl RuleFinder for IdentityAll {
                 if node.is_spider() {
                     idents.push(IdentityKind::Spider(id));
                 } else if node.is_h() {
-                    for (id2, node2) in dg.neighbors_of_inner(id).unwrap() {
-                        if seen.contains(&id2) { continue; }
+                    for (id2, node2) in dg.neighbors_inner(id).unwrap() {
+                        if seen.contains(id2) { continue; }
                         if node2.is_h()
                             && node2.has_defarg()
-                            && dg.arity(id2).unwrap() == 2
+                            && dg.arity(*id2).unwrap() == 2
                         {
-                            seen.push(id2);
-                            idents.push(IdentityKind::HBox(id, id2));
+                            seen.push(*id2);
+                            idents.push(IdentityKind::HBox(id, *id2));
                         }
                     }
                 }
@@ -69,13 +129,13 @@ impl RuleFinder for IdentityAll {
     }
 }
 
-impl<'a> Rule for IdentityAllData<'a> {
+impl<'a> Rule<ZH> for IdentityAllData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, idents } = self;
         for kind in idents.into_iter() {
             match kind {
                 IdentityKind::Spider(s) => {
-                    let mut nb_iter = dg.neighbors_of(s).unwrap().map(fst);
+                    let mut nb_iter = dg.neighbor_ids(s).unwrap().copied();
                     let nb1 = nb_iter.next().unwrap();
                     if let Some(nb2) = nb_iter.next() {
                         // not a self-neighbor
@@ -84,13 +144,15 @@ impl<'a> Rule for IdentityAllData<'a> {
                     } else {
                         // self-neighbor
                         dg.remove_node(s).unwrap();
+                        dg.scalar *= 2.0;
                     }
                 },
                 IdentityKind::HBox(h1, h2) => {
                     let mut nb_iter =
-                        dg.neighbor_ids_of(h1).unwrap()
-                        .chain(dg.neighbor_ids_of(h2).unwrap())
-                        .filter(|id| *id != h1 && *id != h2);
+                        dg.neighbor_ids(h1).unwrap()
+                        .chain(dg.neighbor_ids(h2).unwrap())
+                        .filter(|id| **id != h1 && **id != h2)
+                        .copied();
                     if let Some(nb1) = nb_iter.next() {
                         // not a self-loop
                         let nb2 = nb_iter.next().unwrap();
@@ -103,6 +165,7 @@ impl<'a> Rule for IdentityAllData<'a> {
                         // self-loop
                         dg.remove_node(h1).unwrap();
                         dg.remove_node(h2).unwrap();
+                        dg.scalar *= 2.0;
                     }
                 }
             }

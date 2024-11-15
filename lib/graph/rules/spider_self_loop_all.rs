@@ -12,12 +12,16 @@ pub struct SpiderSelfLoopAll;
 
 /// Output of [`SpiderSelfLoopAll::find`].
 #[derive(Debug)]
-pub struct SpiderSelfLoopAllData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct SpiderSelfLoopAllData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) spiders: Vec<NodeId>,
 }
 
-impl<'a> SpiderSelfLoopAllData<'a> {
+impl<'a, A> SpiderSelfLoopAllData<'a, A>
+where A: DiagramData
+{
     /// Return the number of spiders found with self-loops.
     pub fn len(&self) -> usize { self.spiders.len() }
 
@@ -28,10 +32,36 @@ impl<'a> SpiderSelfLoopAllData<'a> {
     pub fn groups(&self) -> &Vec<NodeId> { &self.spiders }
 }
 
-impl RuleFinder for SpiderSelfLoopAll {
-    type Output<'a> = SpiderSelfLoopAllData<'a>;
+impl RuleFinder<ZX> for SpiderSelfLoopAll {
+    type Output<'a> = SpiderSelfLoopAllData<'a, ZX>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZX>) -> Option<Self::Output<'_>> {
+        let mut spiders: Vec<NodeId> = Vec::new();
+        for (id, _node) in dg.nodes_inner() {
+            if dg.mutual_arity_e(id, id).unwrap() > 0 {
+                spiders.push(id);
+            }
+        }
+        if spiders.is_empty() {
+            None
+        } else {
+            Some(SpiderSelfLoopAllData { dg, spiders })
+        }
+    }
+}
+
+impl<'a> Rule<ZX> for SpiderSelfLoopAllData<'a, ZX> {
+    fn simplify(self) {
+        let Self { dg, spiders } = self;
+        spiders.into_iter()
+            .for_each(|s| { dg.remove_wires_e(s, s, None).unwrap(); });
+    }
+}
+
+impl RuleFinder<ZH> for SpiderSelfLoopAll {
+    type Output<'a> = SpiderSelfLoopAllData<'a, ZH>;
+
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         let mut spiders: Vec<NodeId> = Vec::new();
         for (id, node) in dg.nodes_inner() {
             if node.is_spider() && dg.mutual_arity(id, id).unwrap() > 0 {
@@ -46,7 +76,7 @@ impl RuleFinder for SpiderSelfLoopAll {
     }
 }
 
-impl<'a> Rule for SpiderSelfLoopAllData<'a> {
+impl<'a> Rule<ZH> for SpiderSelfLoopAllData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, spiders } = self;
         spiders.into_iter()

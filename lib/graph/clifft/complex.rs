@@ -9,6 +9,8 @@
 
 use std::ops::{ Add, AddAssign, Sub, SubAssign, Mul, MulAssign, Neg };
 use num_complex::Complex64 as C64;
+use num_traits::{ Zero, One };
+use crate::graph::ComplexRing;
 
 /// An element of the ring **D**[exp(*i* *π* / 4)], where **D** is the ring of
 /// dyadic rational numbers.
@@ -653,6 +655,81 @@ impl Mul<Complex> for i32 {
     fn mul(self, mut rhs: Complex) -> Complex {
         rhs *= self;
         rhs
+    }
+}
+
+impl Zero for Complex {
+    fn zero() -> Self { Self::ZERO }
+
+    fn is_zero(&self) -> bool { *self == Self::ZERO }
+}
+
+impl One for Complex {
+    fn one() -> Self { Self::ONE }
+}
+
+impl ComplexRing for Complex {
+    fn conj(mut self) -> Self {
+        self.im = -self.im;
+        std::mem::swap(&mut self.ph_pos, &mut self.ph_neg);
+        self
+    }
+}
+
+impl std::fmt::Display for Complex {
+    #[allow(clippy::comparison_chain)]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.re == 0 && self.im == 0
+            && self.ph_pos == 0 && self.ph_neg == 0
+        {
+            write!(f, "0")?;
+            return Ok(());
+        }
+        if self.div2 < 0 {
+            write!(f, "{:.0}*(", 2.0_f64.powi(-self.div2))?;
+        } else if self.div2 > 0 {
+            write!(f, "(")?;
+        }
+        let mut prev = false;
+        if self.re != 0 {
+            write!(f, "{}", self.re)?;
+            prev = true;
+        }
+        if prev {
+            if self.im > 0 {
+                write!(f, " + {}i", self.im)?;
+            } else if self.im < 0 {
+                write!(f, " - {}i", self.im.abs())?;
+            }
+        } else if self.im != 0 {
+            write!(f, "{}i", self.im)?;
+            prev = true;
+        }
+        if prev {
+            if self.ph_pos > 0 {
+                write!(f, " + {}*exp(+iπ/4)", self.ph_pos)?;
+            } else if self.ph_pos < 0 {
+                write!(f, " - {}*exp(+iπ/4)", self.ph_pos.abs())?;
+            }
+        } else if self.ph_pos != 0 {
+            write!(f, "{}*exp(+iπ/4)", self.ph_pos)?;
+            prev = true;
+        }
+        if prev {
+            if self.ph_neg > 0 {
+                write!(f, " + {}*exp(-iπ/4)", self.ph_neg)?;
+            } else if self.ph_neg < 0 {
+                write!(f, " - {}*exp(-iπ/4)", self.ph_neg.abs())?;
+            }
+        } else if self.ph_neg != 0 {
+            write!(f, "{}*exp(-iπ/4)", self.ph_neg)?;
+        }
+        if self.div2 > 0 {
+            write!(f, ")/{:.0}", 2.0_f64.powi(self.div2))?;
+        } else if self.div2 < 0 {
+            write!(f, ")")?;
+        }
+        Ok(())
     }
 }
 

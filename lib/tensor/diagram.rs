@@ -1,6 +1,7 @@
 use std::io::Write;
 use num_complex::Complex64 as C64;
 use crate::{
+    graph,
     indexmap::IndexMap,
     tensor::{
         Element,
@@ -336,8 +337,7 @@ where A: ElementData
     /// Fails if any `Element` slices cannot be written as a pure generator or
     /// if any `Element` repeats a ket index without another `Element`'s
     /// matching bra index in between.
-    pub fn to_graph(&self) -> TensorResult<crate::graph::Diagram> {
-        use crate::graph as graph;
+    pub fn to_graph(&self) -> TensorResult<graph::Diagram<graph::ZH>> {
         let mut graph = graph::Diagram::new();
         let mut node_id: graph::NodeId;
         let (inputs, outputs) = self.ins_outs();
@@ -347,7 +347,7 @@ where A: ElementData
 
         // add inputs
         for idx in inputs.into_iter() {
-            node_id = graph.add_node(graph::Node::Input);
+            node_id = graph.add_node(graph::ZHNode::Input);
             wires.insert(idx, node_id);
         }
 
@@ -359,9 +359,9 @@ where A: ElementData
                 Kind::Z(_) | Kind::X(_) | Kind::H(_) => {
                     let node =
                         match elem.kind {
-                            Kind::Z(ph) => graph::Node::Z(ph),
-                            Kind::X(ph) => graph::Node::X(ph),
-                            Kind::H(a) => graph::Node::H(a),
+                            Kind::Z(ph) => graph::ZHNode::Z(ph),
+                            Kind::X(ph) => graph::ZHNode::X(ph),
+                            Kind::H(a) => graph::ZHNode::H(a),
                             _ => unreachable!(),
                         };
                     node_id = graph.add_node(node);
@@ -379,7 +379,7 @@ where A: ElementData
                     wires.swap(a, b);
                 },
                 Kind::Cup(a, b) => {
-                    let n = graph.add_node(graph::Node::z());
+                    let n = graph.add_node(graph::ZHNode::z());
                     to_remove.push(n);
                     if wires.insert(a, n).is_some() {
                         return Err(DuplicateWireIndex(a));
@@ -401,7 +401,7 @@ where A: ElementData
 
         // add outputs
         for idx in outputs.into_iter() {
-            node_id = graph.add_node(graph::Node::Output);
+            node_id = graph.add_node(graph::ZHNode::Output);
             let prev_id = wires.remove(idx).unwrap();
             graph.add_wire(prev_id, node_id).unwrap();
         }

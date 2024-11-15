@@ -13,12 +13,16 @@ pub struct HSelfLoopAll;
 
 /// Output of [`HSelfLoopAll::find`].
 #[derive(Debug)]
-pub struct HSelfLoopAllData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HSelfLoopAllData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) hh: Vec<NodeId>,
 }
 
-impl<'a> HSelfLoopAllData<'a> {
+impl<'a, A> HSelfLoopAllData<'a, A>
+where A: DiagramData
+{
     /// Return the number of H-boxes with self-loops found.
     pub fn len(&self) -> usize { self.hh.len() }
 
@@ -29,10 +33,10 @@ impl<'a> HSelfLoopAllData<'a> {
     pub fn groups(&self) -> &Vec<NodeId> { &self.hh }
 }
 
-impl RuleFinder for HSelfLoopAll {
-    type Output<'a> = HSelfLoopAllData<'a>;
+impl RuleFinder<ZH> for HSelfLoopAll {
+    type Output<'a> = HSelfLoopAllData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         let mut hh: Vec<NodeId> = Vec::new();
         for (id, node) in dg.nodes_inner() {
             if node.is_h() && dg.mutual_arity(id, id).unwrap() > 0 {
@@ -47,7 +51,7 @@ impl RuleFinder for HSelfLoopAll {
     }
 }
 
-impl<'a> Rule for HSelfLoopAllData<'a> {
+impl<'a> Rule<ZH> for HSelfLoopAllData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, hh } = self;
         for h in hh.into_iter() {

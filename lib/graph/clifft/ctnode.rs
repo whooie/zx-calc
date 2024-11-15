@@ -1,5 +1,5 @@
 use crate::{
-    graph2::{ NodeData, clifft::TPhase },
+    graph::{ NodeData, clifft::TPhase },
     tensor::{ Element, ElementData },
 };
 

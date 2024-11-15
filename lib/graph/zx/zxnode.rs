@@ -1,28 +1,23 @@
-use num_complex::Complex64 as C64;
-use num_traits::One;
 use crate::{
-    c64_eq,
-    graph2::{ NodeData, Spider },
+    graph::{ NodeData, Spider },
     phase::Phase,
     tensor::{ Element, ElementData },
 };
 
-/// A single node in a ZH-diagram and its data.
+/// A single node in a ZX-diagram and its data.
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum ZHNode {
+pub enum ZXNode {
     /// A Z-spider, parameterized by a real phase.
     Z(Phase),
     /// An X-spider, parameterized by a real phase.
     X(Phase),
-    /// An H-box, parameterized by a general complex number.
-    H(C64),
     /// Termination of a wire as an input to the diagram.
     Input,
     /// Termination of a wire as an output of the diagram.
     Output,
 }
 
-impl ZHNode {
+impl ZXNode {
     /// Create a new, phaseless Z-spider.
     pub fn z() -> Self { Self::Z(Phase::zero()) }
 
@@ -59,9 +54,6 @@ impl ZHNode {
     /// Cre ate a new X-spider with phase `(a / b) × 2π`.
     pub fn x_frac(a: i64, b: i64) -> Self { Self::X(Phase::new(a, b)) }
 
-    /// Create a new H-box with default argument, `-1`.
-    pub fn h() -> Self { Self::H(-C64::one()) }
-
     /// Create a new input.
     pub fn input() -> Self { Self::Input }
 
@@ -78,19 +70,12 @@ impl ZHNode {
         }
     }
 
-    pub(crate) fn map_arg<F>(&mut self, f: F)
-    where F: FnOnce(C64) -> C64
-    {
-        if let Self::H(a) = self { *a = f(*a); }
-    }
-
     pub(crate) fn adjoint_mut(&mut self) {
         match self {
-            Self::Z(ph) => { *self = ZHNode::Z(-*ph); },
-            Self::X(ph) => { *self = ZHNode::X(-*ph); },
-            Self::H(a) => { *self = ZHNode::H(a.conj()); },
-            Self::Input => { *self = ZHNode::Output; },
-            Self::Output => { *self = ZHNode::Input; },
+            Self::Z(ph) => { *self = ZXNode::Z(-*ph); },
+            Self::X(ph) => { *self = ZXNode::X(-*ph); },
+            Self::Input => { *self = ZXNode::Output; },
+            Self::Output => { *self = ZXNode::Input; },
         }
     }
 
@@ -120,20 +105,6 @@ impl ZHNode {
         }
     }
 
-    /// Return `true` if `self` is `H`.
-    pub fn is_h(&self) -> bool { matches!(self, Self::H(_)) }
-
-    /// Return `true` if `self` is `H` and the argument satisfies some
-    /// predicate.
-    pub fn is_h_and<F>(&self, pred: F) -> bool
-    where F: FnOnce(C64) -> bool
-    {
-        match self {
-            Self::H(a) => pred(*a),
-            _ => false,
-        }
-    }
-
     /// Return `true` if `self` is `Input`.
     pub fn is_input(&self) -> bool { matches!(self, Self::Input) }
 
@@ -157,7 +128,7 @@ impl ZHNode {
 
     /// Return `true` if `self` is a generator (`Z`, `X`, or `H`).
     pub fn is_generator(&self) -> bool {
-        matches!(self, Self::Z(_) | Self::X(_) | Self::H(_))
+        matches!(self, Self::Z(_) | Self::X(_))
     }
 
     /// Return `true` if `self` is `Z`, `X`, or `H` and has the default argument
@@ -166,7 +137,6 @@ impl ZHNode {
     pub fn has_defarg(&self) -> bool {
         match self {
             Self::Z(ph) | Self::X(ph) => *ph == Phase::zero(),
-            Self::H(a) => (*a + C64::one()).norm() < 1e-15,
             Self::Input | Self::Output => false,
         }
     }
@@ -229,24 +199,6 @@ impl ZHNode {
         }
     }
 
-    /// If `self` is `H`, return the associated argument.
-    pub fn arg(&self) -> Option<C64> {
-        match self {
-            Self::H(a) => Some(*a),
-            _ => None,
-        }
-    }
-
-    /// Return `true` if `self` is `H` with the given argument.
-    pub fn has_arg<T>(&self, arg: T) -> bool
-    where T: Into<C64>
-    {
-        match self {
-            Self::H(a) => c64_eq(*a, arg),
-            _ => false,
-        }
-    }
-
     pub(crate) fn to_element<A>(self, ins: &[usize], outs: &[usize])
         -> Element<A>
     where A: ElementData
@@ -256,8 +208,6 @@ impl ZHNode {
                 Element::z(ins.iter().copied(), outs.iter().copied(), Some(ph)),
             Self::X(ph) =>
                 Element::x(ins.iter().copied(), outs.iter().copied(), Some(ph)),
-            Self::H(a) =>
-                Element::h(ins.iter().copied(), outs.iter().copied(), Some(a)),
             Self::Input | Self::Output => unreachable!()
         }
     }
@@ -267,7 +217,7 @@ impl ZHNode {
         use tabbycat::attributes::*;
         use crate::vizdefs::*;
         match self {
-            ZHNode::Z(ph) => {
+            ZXNode::Z(ph) => {
                 let ph_label = ph.label();
                 AttrList::new()
                     .add_pair(label(ph_label))
@@ -276,7 +226,7 @@ impl ZHNode {
                     .add_pair(style(Style::Filled))
                     .add_pair(fillcolor(Z_COLOR))
             },
-            ZHNode::X(ph) => {
+            ZXNode::X(ph) => {
                 let ph_label = ph.label();
                 AttrList::new()
                     .add_pair(label(ph_label))
@@ -285,26 +235,12 @@ impl ZHNode {
                     .add_pair(style(Style::Filled))
                     .add_pair(fillcolor(X_COLOR))
             },
-            ZHNode::H(a) => {
-                let a_label =
-                    if self.has_defarg() {
-                        "".to_string()
-                    } else {
-                        format!("{}", a)
-                    };
-                AttrList::new()
-                    .add_pair(label(a_label))
-                    .add_pair(shape(Shape::Square))
-                    .add_pair(height(SQUARE_HEIGHT))
-                    .add_pair(style(Style::Filled))
-                    .add_pair(fillcolor(H_COLOR))
-            },
-            ZHNode::Input => {
+            ZXNode::Input => {
                 AttrList::new()
                     .add_pair(label("Input"))
                     .add_pair(shape(Shape::Plaintext))
             },
-            ZHNode::Output => {
+            ZXNode::Output => {
                 AttrList::new()
                     .add_pair(label("Output"))
                     .add_pair(shape(Shape::Plaintext))
@@ -313,7 +249,7 @@ impl ZHNode {
     }
 }
 
-impl NodeData for ZHNode {
+impl NodeData for ZXNode {
     fn new_id() -> Self { Self::z() }
 
     fn new_input() -> Self { Self::Input }
@@ -327,7 +263,7 @@ impl NodeData for ZHNode {
     fn conjugate(&mut self) { self.adjoint_mut(); }
 }
 
-impl From<Spider> for ZHNode {
+impl From<Spider> for ZXNode {
     fn from(spider: Spider) -> Self {
         match spider {
             Spider::Z(ph) => Self::Z(ph),

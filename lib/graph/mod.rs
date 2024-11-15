@@ -48,24 +48,26 @@ pub enum GraphError {
 }
 pub type GraphResult<T> = Result<T, GraphError>;
 
-pub(crate) mod node;
-pub use node::*;
+pub(crate) mod spider;
+pub use spider::*;
+
+pub mod zx;
+pub use zx::{ ZX, ZXNode, ZXWire };
+
+pub mod zh;
+pub use zh::{ ZH, ZHNode };
+
+pub mod clifft;
+pub use clifft::{ CT, CTNode, CTWire, TPhase, Complex };
+
+pub mod rules;
 
 pub(crate) mod diagram;
 pub use diagram::*;
 
-pub mod circuit;
-
-pub mod clifft;
-
-pub mod rules;
-
-/// Identifies a node in a diagram by its index.
+/// Identifies a node in a diagram.
 pub type NodeId = usize;
 
-/// An (index, data) pair.
-pub type NodeData<'a> = (NodeId, &'a node::Node);
-
-/// Identifies an input or output qubit in a diagram by its index.
+/// Identifies an input or output qubit in a diagram.
 pub type QubitId = usize;
 

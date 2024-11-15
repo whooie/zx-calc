@@ -22,13 +22,17 @@ pub type SpiderGroup = (NodeId, Vec<NodeId>, Phase);
 
 /// Output of [`FuseAll::find`].
 #[derive(Debug)]
-pub struct FuseAllData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct FuseAllData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     // all groups of spiders; groups are guaranteed disconnected from each other
     pub(crate) groups: Vec<SpiderGroup>,
 }
 
-impl<'a> FuseAllData<'a> {
+impl<'a, A> FuseAllData<'a, A>
+where A: DiagramData
+{
     /// Return the number of connected groups found.
     ///
     /// All groups are guaranteed to be disconnected from each other and contain
@@ -42,35 +46,39 @@ impl<'a> FuseAllData<'a> {
     pub fn groups(&self) -> &Vec<SpiderGroup> { &self.groups }
 }
 
-impl RuleFinder for FuseAll {
-    type Output<'a> = FuseAllData<'a>;
+impl RuleFinder<ZX> for FuseAll {
+    type Output<'a> = FuseAllData<'a, ZX>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZX>) -> Option<Self::Output<'_>> {
         // DFS to find all groups of connected spiders of the same color,
         // starting at every non-io node and ignoring ones already seen
         let mut groups: Vec<SpiderGroup> = Vec::new();
         let mut group: Vec<NodeId> = Vec::new();
         let mut ph_sum: Phase;
-        let mut visited: Vec<NodeId> = Vec::with_capacity(dg.node_count);
-        let mut to_visit: Vec<(NodeId, &Node)> = Vec::new();
+        let mut visited: Vec<NodeId> = Vec::new();
+        let mut to_visit: Vec<(NodeId, &ZXNode)> = Vec::new();
         for (id0, n0) in dg.nodes_inner() {
-            if !n0.is_spider() || visited.contains(&id0) { continue; }
+            if visited.contains(&id0) { continue; }
             ph_sum = Phase::zero();
             visited.push(id0);
-            dg.neighbors_of_inner(id0).unwrap()
-                .filter(|(id, n)| {
-                    n.is_same_color(n0) && !visited.contains(id)
+            dg.neighbors_inner(id0).unwrap()
+                .filter(|(w, n)| {
+                    w.is_e()
+                        && n.is_same_color(n0)
+                        && !visited.contains(&w.id())
                 })
-                .for_each(|(id, n)| { to_visit.push((id, n)); });
+                .for_each(|(w, n)| { to_visit.push((w.id(), n)); });
             while let Some((id_next, n_next)) = to_visit.pop() {
                 group.push(id_next);
                 ph_sum += n_next.phase().unwrap();
                 visited.push(id_next);
-                dg.neighbors_of_inner(id_next).unwrap()
-                    .filter(|(id, n)| {
-                        n.is_same_color(n0) && !visited.contains(id)
+                dg.neighbors_inner(id_next).unwrap()
+                    .filter(|(w, n)| {
+                        w.is_e()
+                            && n.is_same_color(n0)
+                            && !visited.contains(&w.id())
                     })
-                    .for_each(|(id, n)| { to_visit.push((id, n)); });
+                    .for_each(|(w, n)| { to_visit.push((w.id(), n)); });
             }
             if !group.is_empty() {
                 let g = std::mem::take(&mut group);
@@ -85,7 +93,127 @@ impl RuleFinder for FuseAll {
     }
 }
 
-impl<'a> Rule for FuseAllData<'a> {
+impl<'a> Rule<ZX> for FuseAllData<'a, ZX> {
+    fn simplify(self) {
+        let Self { dg, groups } = self;
+        let mut all_nb: Vec<ZXWire> = Vec::new();
+        for (id0, others, ph_sum) in groups.into_iter() {
+            // deal with wires first -- we want to use `delete_node` here and
+            // manage connections manually, so we need to keep an accurate count
+            // of how many wires are disappearing
+            //
+            // namely, we want to remove all wires within the group, as well as
+            // any self-loops on any group nodes including the "base" node, id0
+            //
+            // *but only for empty wires*
+            //
+            // every wire removed will be double-counted
+            let mut remove_wire_x2: usize = 0;
+
+            // deal with the base node first, converting all wires within the
+            // group to self-wires so they can all be removed in one pass
+            let nnb0 = dg.wires[id0].as_mut().unwrap();
+            for nb in nnb0.iter_mut() {
+                match nb {
+                    ZXWire::E(id) => {
+                        if *id == id0 {
+                            remove_wire_x2 += 1;
+                        } else if others.contains(id) {
+                            remove_wire_x2 += 1;
+                            *id = id0;
+                        }
+                    },
+                    ZXWire::H(id) => {
+                        if others.contains(id) { *id = id0; }
+                    },
+                }
+            }
+            // remove wires
+            while let Some(k) =
+                nnb0.iter().enumerate()
+                .find_map(|(j, nb)| nb.has_id(id0).then_some(j))
+            {
+                nnb0.swap_remove(k);
+            }
+
+            // now deal with other nodes -- removal of their wires is taken care
+            // of by `delete_node`, so we just have to count them and only keep
+            // track of neighbors outside the group
+            for id1 in others.iter() {
+                for nb in dg.delete_node(*id1).unwrap().1.into_iter() {
+                    if nb.is_e()
+                        && (nb.has_id(id0) || others.contains(&nb.id()))
+                    {
+                        remove_wire_x2 += 1;
+                    } else {
+                        all_nb.push(nb);
+                    }
+                }
+            }
+            // nnb0 was dropped because we needed to call `delete_node`
+            dg.wires[id0].as_mut().unwrap().append(&mut all_nb);
+
+            // take care of external connections and total wire count
+            dg.wires.iter_mut().flatten()
+                .flat_map(|nnb| nnb.iter_mut())
+                .for_each(|nb| {
+                    if others.iter().any(|id| nb.has_id(*id)) {
+                        nb.map_id(|_| id0);
+                    }
+                });
+            assert!(remove_wire_x2 % 2 == 0);
+            dg.wire_count -= remove_wire_x2 / 2;
+
+            dg.nodes[id0].as_mut().unwrap()
+                .map_phase(|ph0| ph0 + ph_sum);
+        }
+    }
+}
+
+impl RuleFinder<ZH> for FuseAll {
+    type Output<'a> = FuseAllData<'a, ZH>;
+
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
+        // DFS to find all groups of connected spiders of the same color,
+        // starting at every non-io node and ignoring ones already seen
+        let mut groups: Vec<SpiderGroup> = Vec::new();
+        let mut group: Vec<NodeId> = Vec::new();
+        let mut ph_sum: Phase;
+        let mut visited: Vec<NodeId> = Vec::new();
+        let mut to_visit: Vec<(NodeId, &ZHNode)> = Vec::new();
+        for (id0, n0) in dg.nodes_inner() {
+            if !n0.is_spider() || visited.contains(&id0) { continue; }
+            ph_sum = Phase::zero();
+            visited.push(id0);
+            dg.neighbors_inner(id0).unwrap()
+                .filter(|(id, n)| {
+                    n.is_same_color(n0) && !visited.contains(id)
+                })
+                .for_each(|(id, n)| { to_visit.push((*id, n)); });
+            while let Some((id_next, n_next)) = to_visit.pop() {
+                group.push(id_next);
+                ph_sum += n_next.phase().unwrap();
+                visited.push(id_next);
+                dg.neighbors_inner(id_next).unwrap()
+                    .filter(|(id, n)| {
+                        n.is_same_color(n0) && !visited.contains(id)
+                    })
+                    .for_each(|(id, n)| { to_visit.push((*id, n)); });
+            }
+            if !group.is_empty() {
+                let g = std::mem::take(&mut group);
+                groups.push((id0, g, ph_sum));
+            }
+        }
+        if groups.is_empty() {
+            None
+        } else {
+            Some(FuseAllData { dg, groups })
+        }
+    }
+}
+
+impl<'a> Rule<ZH> for FuseAllData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, groups } = self;
         let mut all_nb: Vec<NodeId> = Vec::new();
@@ -95,7 +223,7 @@ impl<'a> Rule for FuseAllData<'a> {
             // of how many wires are disappearing
             //
             // namely, we want to remove all wires within the group, as well as
-            // any self-loops on any group nodes, including the "base" node, id0
+            // any self-loops on any group nodes including the "base" node, id0
             //
             // every such wire will be double-counted
             let mut remove_wire_x2: usize = 0;

@@ -6,7 +6,7 @@
 
 use num_complex::Complex64 as C64;
 use crate::{
-    graph::clifft::complex::Complex,
+    graph::clifft::Complex,
     phase::Phase,
 };
 
@@ -97,6 +97,19 @@ impl TPhase {
     /// Convert to a complex number with modulus `r` and argument equal to
     /// `self`.
     pub fn as_polar(self, r: f64) -> C64 { Phase::from(self).as_polar(r) }
+
+    pub(crate) fn label(&self) -> String {
+        match self {
+            Self::T0 => "".to_string(),
+            Self::T1 => "π/4".to_string(),
+            Self::T2 => "π/2".to_string(),
+            Self::T3 => "3π/4".to_string(),
+            Self::T4 => "π".to_string(),
+            Self::T5 => "5π/4".to_string(),
+            Self::T6 => "3π/2".to_string(),
+            Self::T7 => "7π/4".to_string(),
+        }
+    }
 }
 
 impl std::ops::Neg for TPhase {
@@ -196,5 +209,6 @@ impl_muldiv_int!(i32);
 impl_muldiv_int!(i64);
 impl_muldiv_int!(i128);
 impl_muldiv_int!(isize);
+
 
 

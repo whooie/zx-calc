@@ -1,4 +1,3 @@
-use crate::phase::Phase;
 use super::*;
 
 /// Convert all unary H-boxes or Z-spiders with phase π connected to any H-box
@@ -22,12 +21,16 @@ pub type StateHPair = (NodeId, NodeId, bool);
 
 /// Output of [`HStateCopyAll::find`].
 #[derive(Debug)]
-pub struct HStateCopyAllData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HStateCopyAllData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) groups: Vec<StateHPair>, // [(z/h state, h-box, is_had)]
 }
 
-impl<'a> HStateCopyAllData<'a> {
+impl<'a, A> HStateCopyAllData<'a, A>
+where A: DiagramData
+{
     /// Return the number of H-boxes found with connected Z- or H-states.
     pub fn len(&self) -> usize { self.groups.len() }
 
@@ -38,25 +41,21 @@ impl<'a> HStateCopyAllData<'a> {
     pub fn groups(&self) -> &Vec<StateHPair> { &self.groups }
 }
 
-impl RuleFinder for HStateCopyAll {
-    type Output<'a> = HStateCopyAllData<'a>;
+impl RuleFinder<ZH> for HStateCopyAll {
+    type Output<'a> = HStateCopyAllData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
-        const EPSILON: f64 = 1e-12;
-        let zero = Phase::zero();
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         let mut groups: Vec<StateHPair> = Vec::new();
         for (id, node) in dg.nodes_inner() {
             if node.is_h() {
-                for (id2, node2) in dg.neighbors_of_inner(id).unwrap() {
-                    if dg.arity(id2).unwrap() == 1
-                        && (
-                            node2.is_z_and(|ph| ph == zero)
-                            || node2.is_h_and(|a| (a + 1.0).norm() < EPSILON)
-                        )
+                for (id2, node2) in dg.neighbors_inner(id).unwrap() {
+                    if dg.arity(*id2).unwrap() == 1
+                        && (node2.is_z() || node2.is_h())
+                        && node2.has_defarg()
                     {
                         let is_had =
                             dg.arity(id).unwrap() == 2 && node.has_defarg();
-                        groups.push((id2, id, is_had));
+                        groups.push((*id2, id, is_had));
                     }
                 }
             }
@@ -69,16 +68,16 @@ impl RuleFinder for HStateCopyAll {
     }
 }
 
-impl<'a> Rule for HStateCopyAllData<'a> {
+impl<'a> Rule<ZH> for HStateCopyAllData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, groups } = self;
         for (state, h, is_had) in groups.into_iter() {
             dg.remove_node(state).unwrap();
             if is_had {
                 let n = dg.get_node_mut(h).unwrap();
-                *n = Node::x_pi();
+                *n = ZHNode::x_pi();
             } else {
-                let (Node::H(a), nnb) = dg.remove_node_nb(h).unwrap()
+                let (ZHNode::H(a), nnb) = dg.remove_node_nb(h).unwrap()
                     else { unreachable!() };
                 let nnb_len = nnb.len();
                 for nb in nnb.into_iter() {
@@ -86,7 +85,7 @@ impl<'a> Rule for HStateCopyAllData<'a> {
                         dg.scalar *= 2.0;
                         continue;
                     }
-                    let x = dg.add_node(Node::x_pi());
+                    let x = dg.add_node(ZHNode::x_pi());
                     dg.add_wire(x, nb).unwrap();
                 }
                 dg.scalar *=
