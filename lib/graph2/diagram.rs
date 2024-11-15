@@ -1895,7 +1895,7 @@ where
 /// let o1 = diagram.add_node(ZXNode::Output);
 /// let o2 = diagram.add_node(ZXNode::Output);
 /// diagram.add_wire(i0, cnot_z)?;
-/// diagram.add_h_wire(cnot_z, o0)?;
+/// diagram.add_wire_h(cnot_z, o0)?;
 /// diagram.add_wire(cnot_z, cnot_x)?;
 /// diagram.add_wire(i1, cnot_x)?;
 /// diagram.add_wire(cnot_x, o1)?;
@@ -1938,7 +1938,7 @@ where
 ///         i1 -- cnot_x -- o1,
 ///         i2 -- xrot -- zrot -- o2,
 ///     }
-///     add_h_wire: { cnot_z -- o0 }
+///     add_wire_h: { cnot_z -- o0 }
 ///     apply_bell: { i0 -- i1 }
 ///     +
 ///     apply_state: {
@@ -1970,43 +1970,33 @@ macro_rules! graph2_diagram {
         )*
     ) => {
         {
-            let mut diagram = $crate::graph2::Diagram::<$variant>::new();
+            let mut _diagram_ = $crate::graph2::Diagram::<$variant>::new();
             $(
             let $node_name =
-                diagram.add_node(
+                _diagram_.add_node(
                     <$variant as $crate::graph2::DiagramData>::Node::$node(
                         $( ($arg).into() ),*
                     )
                 );
             )*
             Ok(())
-            $(
-            .and_then(|_| {
+            $($(.and_then(|_| {
+                let mut _last_ = $node1_name;
                 Ok(())
-                $(
-                .and_then(|_| {
-                    diagram.$uni_method($node0_name, $( ($uni_arg).into() ),*)
-                })
-                )*
-            })
-            )*
-            $(
-            $(
-            .and_then(|_| {
-                let mut last = $node1_name;
-                Ok(())
-                $(
-                .and_then(|_| {
-                    let res = diagram.$bin_method(last, $nodek_name);
-                    last = $nodek_name;
+                $(.and_then(|_| {
+                    let res = _diagram_.$bin_method(_last_, $nodek_name);
+                    _last_ = $nodek_name;
                     res
-                })
-                )+
-            })
-            )*
-            )*
+                }))+
+            }))*)*
+            $(.and_then(|_| {
+                Ok(())
+                $(.and_then(|_| {
+                    _diagram_.$uni_method($node0_name, $( ($uni_arg).into() ),*)
+                }))*
+            }))*
             .map(|_| {
-                let nodes:
+                let _nodes_:
                     std::collections::HashMap<
                         &'static str,
                         $crate::graph2::NodeId
@@ -2014,11 +2004,11 @@ macro_rules! graph2_diagram {
                     [$( (stringify!($node_name), $node_name) ),*]
                     .into_iter()
                     .collect();
-                (diagram, nodes)
+                (_diagram_, _nodes_)
             })
         }
     }
 }
 
-
+pub use graph2_diagram;
 

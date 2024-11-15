@@ -12,15 +12,17 @@ pub struct HSelfLoop;
 
 /// Output of [`HSelfLoop::find`].
 #[derive(Debug)]
-pub struct HSelfLoopData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HSelfLoopData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) h: NodeId,
 }
 
-impl RuleFinder for HSelfLoop {
-    type Output<'a> = HSelfLoopData<'a>;
+impl RuleFinder<ZH> for HSelfLoop {
+    type Output<'a> = HSelfLoopData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         for (id, node) in dg.nodes_inner() {
             if node.is_h() && dg.mutual_arity(id, id).unwrap() > 0 {
                 return Some(HSelfLoopData { dg, h: id });
@@ -30,7 +32,7 @@ impl RuleFinder for HSelfLoop {
     }
 }
 
-impl<'a> Rule for HSelfLoopData<'a> {
+impl<'a> Rule<ZH> for HSelfLoopData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, h } = self;
         if dg.arity(h).unwrap() == 2

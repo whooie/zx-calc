@@ -21,12 +21,16 @@ pub type HStateMulGroup = (NodeId, Vec<(NodeId, C64)>);
 
 /// Output of [`HStateMulAll::find`].
 #[derive(Debug)]
-pub struct HStateMulAllData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HStateMulAllData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) groups: Vec<HStateMulGroup>,
 }
 
-impl<'a> HStateMulAllData<'a> {
+impl<'a, A> HStateMulAllData<'a, A>
+where A: DiagramData
+{
     /// Return the number of Z-spiders found with at least two unary H-boxes
     /// attached.
     pub fn len(&self) -> usize { self.groups.len() }
@@ -38,20 +42,20 @@ impl<'a> HStateMulAllData<'a> {
     pub fn groups(&self) -> &Vec<HStateMulGroup> { &self.groups }
 }
 
-impl RuleFinder for HStateMulAll {
-    type Output<'a> = HStateMulAllData<'a>;
+impl RuleFinder<ZH> for HStateMulAll {
+    type Output<'a> = HStateMulAllData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         let mut groups: Vec<HStateMulGroup> = Vec::new();
         let mut hh: Vec<(NodeId, C64)> = Vec::new();
         for (id, node) in dg.nodes_inner() {
             if node.is_z() {
-                dg.neighbors_of_inner(id).unwrap()
+                dg.neighbors_inner(id).unwrap()
                     .filter(|(id2, node2)| {
-                        node2.is_h() && dg.arity(*id2).unwrap() == 1
+                        node2.is_h() && dg.arity(**id2).unwrap() == 1
                     })
                     .for_each(|(id2, node2)| {
-                        hh.push((id2, node2.arg().unwrap()));
+                        hh.push((*id2, node2.arg().unwrap()));
                     });
             }
             if hh.len() > 1 {
@@ -69,7 +73,7 @@ impl RuleFinder for HStateMulAll {
     }
 }
 
-impl<'a> Rule for HStateMulAllData<'a> {
+impl<'a> Rule<ZH> for HStateMulAllData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, groups } = self;
         let zero = Phase::zero();
@@ -85,7 +89,7 @@ impl<'a> Rule for HStateMulAllData<'a> {
                     })
                     .product();
                 let n = dg.get_node_mut(s).unwrap();
-                *n = Node::H(a_prod);
+                *n = ZHNode::H(a_prod);
             } else {
                 let (h0, _) = hh.pop().unwrap();
                 let a_prod: C64 =

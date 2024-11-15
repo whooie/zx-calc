@@ -11,26 +11,53 @@ pub struct HLoop;
 
 /// Output of [`HLoop::find`].
 #[derive(Debug)]
-pub struct HLoopData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HLoopData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) s: NodeId, // spider
-    pub(crate) hh: Vec<NodeId>, // h-boxes
+    pub(crate) hh: Vec<NodeId>, // h-boxes (empty if ZX)
 }
 
-impl RuleFinder for HLoop {
-    type Output<'a> = HLoopData<'a>;
+impl RuleFinder<ZX> for HLoop {
+    type Output<'a> = HLoopData<'a, ZX>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZX>) -> Option<Self::Output<'_>> {
+        for (id, _node) in dg.nodes_inner() {
+            if dg.mutual_arity_h(id, id).unwrap() > 0 {
+                return Some(HLoopData { dg, s: id, hh: Vec::with_capacity(0) });
+            }
+        }
+        None
+    }
+}
+
+impl<'a> Rule<ZX> for HLoopData<'a, ZX> {
+    fn simplify(self) {
+        let Self { dg, s, hh: _ } = self;
+        let nloops = dg.remove_wires_h(s, s, None).unwrap();
+        if nloops % 2 == 1 {
+            dg.get_node_mut(s).unwrap()
+                .map_phase(|ph| ph + Phase::pi());
+        }
+        dg.scalar *= std::f64::consts::FRAC_1_SQRT_2.powi(nloops as i32);
+    }
+}
+
+impl RuleFinder<ZH> for HLoop {
+    type Output<'a> = HLoopData<'a, ZH>;
+
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         let mut hh: Vec<NodeId> = Vec::new();
         for (id, node) in dg.nodes_inner() {
             if node.is_spider() {
-                for (id2, node2) in dg.neighbors_of_inner(id).unwrap() {
+                for (id2, node2) in dg.neighbors_inner(id).unwrap() {
                     if node2.is_h()
                         && node2.has_defarg()
-                        && dg.arity(id2).unwrap() == 2
-                        && dg.mutual_arity(id, id2).unwrap() == 2
+                        && dg.arity(*id2).unwrap() == 2
+                        && dg.mutual_arity(id, *id2).unwrap() == 2
                     {
-                        hh.push(id2);
+                        hh.push(*id2);
                     }
                 }
                 if hh.is_empty() {
@@ -42,14 +69,16 @@ impl RuleFinder for HLoop {
     }
 }
 
-impl<'a> Rule for HLoopData<'a> {
+impl<'a> Rule<ZH> for HLoopData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, s, hh } = self;
         let nloops = hh.len();
         hh.into_iter()
             .for_each(|h| { dg.remove_node(h).unwrap(); });
-        dg.get_node_mut(s).unwrap()
-            .map_phase(|ph| ph + (nloops as i64) * Phase::pi());
+        if nloops % 2 == 1 {
+            dg.get_node_mut(s).unwrap()
+                .map_phase(|ph| ph + Phase::pi());
+        }
         dg.scalar *= std::f64::consts::FRAC_1_SQRT_2.powi(nloops as i32);
     }
 }

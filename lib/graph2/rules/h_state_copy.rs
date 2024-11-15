@@ -1,4 +1,3 @@
-use crate::phase::Phase;
 use super::*;
 
 /// Z-spider and H-box version of [`HExplode`], converting a unary H-box or
@@ -14,30 +13,29 @@ pub struct HStateCopy;
 
 /// Output of [`HStateCopy::find`].
 #[derive(Debug)]
-pub struct HStateCopyData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HStateCopyData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) state: NodeId, // z-state or h-state
     pub(crate) h: (NodeId, bool), // h-box copier
 }
 
-impl RuleFinder for HStateCopy {
-    type Output<'a> = HStateCopyData<'a>;
+impl RuleFinder<ZH> for HStateCopy {
+    type Output<'a> = HStateCopyData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
-        const EPSILON: f64 = 1e-12;
-        let zero = Phase::zero();
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         for (id, node) in dg.nodes_inner() {
             if node.is_h() {
-                for (id2, node2) in dg.neighbors_of_inner(id).unwrap() {
-                    if dg.arity(id2).unwrap() == 1
-                        && (
-                            node2.is_z_and(|ph| ph == zero)
-                            || node2.is_h_and(|a| (a + 1.0).norm() < EPSILON)
-                        )
+                for (id2, node2) in dg.neighbors_inner(id).unwrap() {
+                    if dg.arity(*id2).unwrap() == 1
+                        && (node2.is_z() || node2.is_h())
+                        && node2.has_defarg()
                     {
                         let is_had =
                             dg.arity(id).unwrap() == 2 && node.has_defarg();
                         let h = (id, is_had);
+                        let id2 = *id2;
                         return Some(HStateCopyData { dg, state: id2, h });
                     }
                 }
@@ -47,15 +45,15 @@ impl RuleFinder for HStateCopy {
     }
 }
 
-impl<'a> Rule for HStateCopyData<'a> {
+impl<'a> Rule<ZH> for HStateCopyData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, state, h: (h, is_had) } = self;
         dg.remove_node(state).unwrap();
         if is_had {
             let n = dg.get_node_mut(h).unwrap();
-            *n = Node::x_pi();
+            *n = ZHNode::x_pi();
         } else {
-            let (Node::H(a), nnb) = dg.remove_node_nb(h).unwrap()
+            let (ZHNode::H(a), nnb) = dg.remove_node_nb(h).unwrap()
                 else { unreachable!() };
             let nnb_len = nnb.len();
             for nb in nnb.into_iter() {
@@ -63,7 +61,7 @@ impl<'a> Rule for HStateCopyData<'a> {
                     dg.scalar *= 2.0;
                     continue;
                 }
-                let x = dg.add_node(Node::x_pi());
+                let x = dg.add_node(ZHNode::x_pi());
                 dg.add_wire(x, nb).unwrap();
             }
             dg.scalar *=

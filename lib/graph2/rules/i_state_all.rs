@@ -21,12 +21,16 @@ pub type IStatePair = (NodeId, Phase, Option<NodeId>);
 
 /// Output of [`IStateAll::find`].
 #[derive(Debug)]
-pub struct IStateAllData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct IStateAllData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) pairs: Vec<IStatePair>,
 }
 
-impl<'a> IStateAllData<'a> {
+impl<'a, A> IStateAllData<'a, A>
+where A: DiagramData
+{
     /// Return the number of ±*y* states found.
     pub fn len(&self) -> usize { self.pairs.len() }
 
@@ -37,21 +41,24 @@ impl<'a> IStateAllData<'a> {
     pub fn pairs(&self) -> &Vec<IStatePair> { &self.pairs }
 }
 
-impl RuleFinder for IStateAll {
-    type Output<'a> = IStateAllData<'a>;
+impl RuleFinder<ZX> for IStateAll {
+    type Output<'a> = IStateAllData<'a, ZX>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZX>) -> Option<Self::Output<'_>> {
         let pos_pi2 = Phase::pi2();
         let neg_pi2 = -Phase::pi2();
         let mut pairs: Vec<IStatePair> = Vec::new();
         for (id, node) in dg.nodes_inner() {
             if node.is_spider_and(|ph| ph == pos_pi2 || ph == neg_pi2)
-                && dg.arity(id).unwrap() == 1
+                && dg.arity_e(id).unwrap() == 1
             {
                 let mb_spider =
-                    dg.find_map_neighbor_of(
+                    dg.find_map_neighbor(
                         id,
-                        |id2, node2| node.is_diff_color(node2).then_some(id2)
+                        |w, n| {
+                            (n.is_diff_color(node) && w.is_e())
+                                .then_some(w.id())
+                        },
                     );
                 if mb_spider.is_some() || node.is_x() {
                     pairs.push((id, node.phase().unwrap(), mb_spider));
@@ -66,7 +73,7 @@ impl RuleFinder for IStateAll {
     }
 }
 
-impl<'a> Rule for IStateAllData<'a> {
+impl<'a> Rule<ZX> for IStateAllData<'a, ZX> {
     fn simplify(self) {
         let Self { dg, pairs } = self;
         for (state, ph0, mb_spider) in pairs.into_iter() {
@@ -76,14 +83,59 @@ impl<'a> Rule for IStateAllData<'a> {
                     .map_phase(|ph| ph - ph0);
             } else {
                 let n = dg.get_node_mut(state).unwrap();
-                *n = Node::Z(-ph0);
+                *n = ZXNode::Z(-ph0);
             }
             if ph0 == Phase::pi2() {
                 dg.scalar *= Phase::pi4().cis();
-            } else if ph0 == -Phase::pi2() {
-                dg.scalar *= -Phase::pi4().cis();
             } else {
-                unreachable!()
+                dg.scalar *= (-Phase::pi4()).cis();
+            }
+        }
+    }
+}
+
+impl RuleFinder<ZH> for IStateAll {
+    type Output<'a> = IStateAllData<'a, ZH>;
+
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
+        let pos_pi2 = Phase::pi2();
+        let neg_pi2 = -Phase::pi2();
+        let mut pairs: Vec<IStatePair> = Vec::new();
+        for (id, node) in dg.nodes_inner() {
+            if node.is_spider_and(|ph| ph == pos_pi2 || ph == neg_pi2)
+                && dg.arity(id).unwrap() == 1
+            {
+                let mb_spider = dg.find_map_neighbor(
+                    id, |id2, node2| node.is_diff_color(node2).then_some(*id2));
+                if mb_spider.is_some() || node.is_x() {
+                    pairs.push((id, node.phase().unwrap(), mb_spider));
+                }
+            }
+        }
+        if pairs.is_empty() {
+            None
+        } else {
+            Some(IStateAllData { dg, pairs })
+        }
+    }
+}
+
+impl<'a> Rule<ZH> for IStateAllData<'a, ZH> {
+    fn simplify(self) {
+        let Self { dg, pairs } = self;
+        for (state, ph0, mb_spider) in pairs.into_iter() {
+            if let Some(inner) = mb_spider {
+                dg.remove_node(state).unwrap();
+                dg.get_node_mut(inner).unwrap()
+                    .map_phase(|ph| ph - ph0);
+            } else {
+                let n = dg.get_node_mut(state).unwrap();
+                *n = ZHNode::Z(-ph0);
+            }
+            if ph0 == Phase::pi2() {
+                dg.scalar *= Phase::pi4().cis();
+            } else {
+                dg.scalar *= (-Phase::pi4()).cis();
             }
         }
     }

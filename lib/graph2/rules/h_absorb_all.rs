@@ -14,12 +14,16 @@ pub struct HAbsorbAll;
 
 /// Output of [`HAbsorbAll::find`].
 #[derive(Debug)]
-pub struct HAbsorbAllData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HAbsorbAllData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) groups: Vec<Vec<NodeId>>, // all pi x-spiders, grouped by h-box
 }
 
-impl<'a> HAbsorbAllData<'a> {
+impl<'a, A> HAbsorbAllData<'a, A>
+where A: DiagramData
+{
     /// Return the total number of unary X(π)-spiders to remove.
     pub fn len_all(&self) -> usize { self.groups.iter().map(|g| g.len()).sum() }
 
@@ -33,22 +37,22 @@ impl<'a> HAbsorbAllData<'a> {
     pub fn groups(&self) -> &Vec<Vec<NodeId>> { &self.groups }
 }
 
-impl RuleFinder for HAbsorbAll {
-    type Output<'a> = HAbsorbAllData<'a>;
+impl RuleFinder<ZH> for HAbsorbAll {
+    type Output<'a> = HAbsorbAllData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         let mut groups: Vec<Vec<NodeId>> = Vec::new();
         let mut group: Vec<NodeId> = Vec::new();
         let pi = Phase::pi();
         // no possibility of group overlap here
         for (id, node) in dg.nodes_inner() {
             if node.is_h() {
-                dg.neighbors_of_inner(id).unwrap()
+                dg.neighbors_inner(id).unwrap()
                     .filter_map(|(id2, node2)| {
                         (
                             node2.is_x_and(|ph| ph == pi)
-                            && dg.arity(id2).unwrap() == 1
-                        ).then_some(id2)
+                            && dg.arity(*id2).unwrap() == 1
+                        ).then_some(*id2)
                     })
                     .for_each(|id2| { group.push(id2); });
                 if !group.is_empty() {
@@ -65,7 +69,7 @@ impl RuleFinder for HAbsorbAll {
     }
 }
 
-impl<'a> Rule for HAbsorbAllData<'a> {
+impl<'a> Rule<ZH> for HAbsorbAllData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, groups } = self;
         for states in groups.into_iter() {

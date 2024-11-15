@@ -8,37 +8,85 @@ use super::*;
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Identity;
 
+/// Nodes that can be simplified to an empty wire.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum IdentityKind {
+    /// A phaseless binary spider surrounded by either empty or Hadamard wires.
     Spider(NodeId),
 //  Spider(spider)
+    /// Two adjacent binary H-boxes with default argument.
     HBox(NodeId, NodeId),
 //  HBox(hbox1, hbox2)
 }
 
 /// Output of [`Identity::find`].
 #[derive(Debug)]
-pub struct IdentityData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct IdentityData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) kind: IdentityKind,
 }
 
-impl RuleFinder for Identity {
-    type Output<'a> = IdentityData<'a>;
+impl RuleFinder<ZX> for Identity {
+    type Output<'a> = IdentityData<'a, ZX>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZX>) -> Option<Self::Output<'_>> {
+        for (id, node) in dg.nodes_inner() {
+            if node.has_defarg()
+                && dg.arity(id).unwrap() == 2
+                && (
+                    dg.arity_e(id).unwrap() == 2
+                    || (
+                        dg.arity_h(id).unwrap() == 2
+                        // don't consider self-loops via Hadamard wires
+                        && dg.mutual_arity(id, id).unwrap() == 0
+                    )
+                )
+            {
+                let kind = IdentityKind::Spider(id);
+                return Some(IdentityData { dg, kind });
+            }
+        }
+        None
+    }
+}
+
+impl<'a> Rule<ZX> for IdentityData<'a, ZX> {
+    fn simplify(self) {
+        let Self { dg, kind } = self;
+        let IdentityKind::Spider(s) = kind else { unreachable!() };
+        let mut nb_iter = dg.neighbor_ids(s).unwrap().copied();
+        let nb1 = nb_iter.next().unwrap();
+        if let Some(nb2) = nb_iter.next() {
+            // not a self-neighbor
+            dg.remove_node(s).unwrap();
+            dg.add_wire(nb1.id(), nb2.id()).unwrap();
+        } else {
+            // self-neighbor
+            assert_eq!(nb1.id(), s);
+            dg.remove_node(s).unwrap();
+            dg.scalar *= if nb1.is_h() { 0.0 } else { 2.0 };
+        }
+    }
+}
+
+impl RuleFinder<ZH> for Identity {
+    type Output<'a> = IdentityData<'a, ZH>;
+
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         for (id, node) in dg.nodes_inner() {
             if node.has_defarg() && dg.arity(id).unwrap() == 2 {
                 if node.is_spider() {
                     let kind = IdentityKind::Spider(id);
                     return Some(IdentityData { dg, kind });
                 } else if node.is_h() {
-                    for (id2, node2) in dg.neighbors_of_inner(id).unwrap() {
+                    for (id2, node2) in dg.neighbors_inner(id).unwrap() {
                         if node2.is_h()
                             && node2.has_defarg()
-                            && dg.arity(id2).unwrap() == 2
+                            && dg.arity(*id2).unwrap() == 2
                         {
-                            let kind = IdentityKind::HBox(id, id2);
+                            let kind = IdentityKind::HBox(id, *id2);
                             return Some(IdentityData { dg, kind });
                         }
                     }
@@ -49,12 +97,12 @@ impl RuleFinder for Identity {
     }
 }
 
-impl<'a> Rule for IdentityData<'a> {
+impl<'a> Rule<ZH> for IdentityData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, kind } = self;
         match kind {
             IdentityKind::Spider(s) => {
-                let mut nb_iter = dg.neighbors_of(s).unwrap().map(fst);
+                let mut nb_iter = dg.neighbor_ids(s).unwrap().copied();
                 let nb1 = nb_iter.next().unwrap();
                 if let Some(nb2) = nb_iter.next() {
                     // not a self-neighbor
@@ -63,13 +111,15 @@ impl<'a> Rule for IdentityData<'a> {
                 } else {
                     // self-neighbor
                     dg.remove_node(s).unwrap();
+                    dg.scalar *= 2.0;
                 }
             },
             IdentityKind::HBox(h1, h2) => {
                 let mut nb_iter =
-                    dg.neighbor_ids_of(h1).unwrap()
-                    .chain(dg.neighbor_ids_of(h2).unwrap())
-                    .filter(|id| *id != h1 && *id != h2);
+                    dg.neighbor_ids(h1).unwrap()
+                    .chain(dg.neighbor_ids(h2).unwrap())
+                    .filter(|id| **id != h1 && **id != h2)
+                    .copied();
                 if let Some(nb1) = nb_iter.next() {
                     let nb2 = nb_iter.next().unwrap();
                     dg.remove_node(h1).unwrap();
@@ -80,6 +130,7 @@ impl<'a> Rule for IdentityData<'a> {
                 } else {
                     dg.remove_node(h1).unwrap();
                     dg.remove_node(h2).unwrap();
+                    dg.scalar *= 2.0;
                 }
             },
         }
@@ -92,21 +143,21 @@ mod tests {
 
     #[test]
     fn simplify_identity() {
-        let mut dg = Diagram::new();
-        let z0 = dg.add_node(Node::z());
-        let z1 = dg.add_node(Node::z_pi());
-        let z2 = dg.add_node(Node::z());
-        let z3 = dg.add_node(Node::z());
-        let z4 = dg.add_node(Node::z());
-        let z5 = dg.add_node(Node::z());
-        let x0 = dg.add_node(Node::x());
-        let x1 = dg.add_node(Node::x_pi());
-        let x2 = dg.add_node(Node::x());
-        let h0 = dg.add_node(Node::h());
-        let h1 = dg.add_node(Node::h());
-        let h2 = dg.add_node(Node::H(1.0.into()));
-        let h3 = dg.add_node(Node::h());
-        let h4 = dg.add_node(Node::h());
+        let mut dg: Diagram<ZH> = Diagram::new();
+        let z0 = dg.add_node(ZHNode::z());
+        let z1 = dg.add_node(ZHNode::z_pi());
+        let z2 = dg.add_node(ZHNode::z());
+        let z3 = dg.add_node(ZHNode::z());
+        let z4 = dg.add_node(ZHNode::z());
+        let z5 = dg.add_node(ZHNode::z());
+        let x0 = dg.add_node(ZHNode::x());
+        let x1 = dg.add_node(ZHNode::x_pi());
+        let x2 = dg.add_node(ZHNode::x());
+        let h0 = dg.add_node(ZHNode::h());
+        let h1 = dg.add_node(ZHNode::h());
+        let h2 = dg.add_node(ZHNode::H(1.0.into()));
+        let h3 = dg.add_node(ZHNode::h());
+        let h4 = dg.add_node(ZHNode::h());
         dg.add_input_wire(z0).unwrap();
         dg.add_output_wire(x0).unwrap();
         dg.add_wire(z0, z1).unwrap();

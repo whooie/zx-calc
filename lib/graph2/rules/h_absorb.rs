@@ -10,25 +10,27 @@ pub struct HAbsorb;
 
 /// Output of [`HAbsorb::find`].
 #[derive(Debug)]
-pub struct HAbsorbData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HAbsorbData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) states: Vec<NodeId>, // pi x-spiders
 }
 
-impl RuleFinder for HAbsorb {
-    type Output<'a> = HAbsorbData<'a>;
+impl RuleFinder<ZH> for HAbsorb {
+    type Output<'a> = HAbsorbData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         let mut states: Vec<NodeId> = Vec::new();
         let pi = Phase::pi();
         for (id, node) in dg.nodes_inner() {
             if node.is_h() {
-                dg.neighbors_of_inner(id).unwrap()
+                dg.neighbors_inner(id).unwrap()
                     .filter_map(|(id2, node2)| {
                         (
                             node2.is_x_and(|ph| ph == pi)
-                            && dg.arity(id2).unwrap() == 1
-                        ).then_some(id2)
+                            && dg.arity(*id2).unwrap() == 1
+                        ).then_some(*id2)
                     })
                     .for_each(|id2| { states.push(id2); });
                 if !states.is_empty() {
@@ -40,7 +42,7 @@ impl RuleFinder for HAbsorb {
     }
 }
 
-impl<'a> Rule for HAbsorbData<'a> {
+impl<'a> Rule<ZH> for HAbsorbData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, states } = self;
         let nstates = states.len();

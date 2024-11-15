@@ -1,6 +1,7 @@
 use num_complex::Complex64 as C64;
 use num_traits::One;
 use crate::{
+    c64_eq,
     graph2::{ NodeData, Spider },
     phase::Phase,
     tensor::{ Element, ElementData },
@@ -237,10 +238,11 @@ impl ZHNode {
     }
 
     /// Return `true` if `self` is `H` with the given argument.
-    pub fn has_arg(&self, arg: C64) -> bool {
-        const EPSILON: f64 = 1e-12;
+    pub fn has_arg<T>(&self, arg: T) -> bool
+    where T: Into<C64>
+    {
         match self {
-            Self::H(a) => (*a - arg).norm() < EPSILON,
+            Self::H(a) => c64_eq(*a, arg),
             _ => false,
         }
     }

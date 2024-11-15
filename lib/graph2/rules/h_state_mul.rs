@@ -12,25 +12,27 @@ pub struct HStateMul;
 
 /// Output of [`HStateMul::find`].
 #[derive(Debug)]
-pub struct HStateMulData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HStateMulData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) s: NodeId, // spider
     pub(crate) hh: Vec<(NodeId, C64)>, // h-boxes
 }
 
-impl RuleFinder for HStateMul {
-    type Output<'a> = HStateMulData<'a>;
+impl RuleFinder<ZH> for HStateMul {
+    type Output<'a> = HStateMulData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         let mut hh: Vec<(NodeId, C64)> = Vec::new();
         for (id, node) in dg.nodes_inner() {
             if node.is_z() {
-                dg.neighbors_of_inner(id).unwrap()
+                dg.neighbors_inner(id).unwrap()
                     .filter(|(id2, node2)| {
-                        node2.is_h() && dg.arity(*id2).unwrap() == 1
+                        node2.is_h() && dg.arity(**id2).unwrap() == 1
                     })
                     .for_each(|(id2, node2)| {
-                        hh.push((id2, node2.arg().unwrap()));
+                        hh.push((*id2, node2.arg().unwrap()));
                     });
             }
             if hh.len() > 1 {
@@ -43,7 +45,7 @@ impl RuleFinder for HStateMul {
     }
 }
 
-impl<'a> Rule for HStateMulData<'a> {
+impl<'a> Rule<ZH> for HStateMulData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, s, mut hh } = self;
         if dg.arity(s).unwrap() == hh.len() + 1
@@ -57,7 +59,7 @@ impl<'a> Rule for HStateMulData<'a> {
                 })
                 .product();
             let n = dg.get_node_mut(s).unwrap();
-            *n = Node::H(a_prod);
+            *n = ZHNode::H(a_prod);
         } else {
             let (h0, _) = hh.pop().unwrap();
             let a_prod: C64 =

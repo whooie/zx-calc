@@ -107,8 +107,29 @@ impl Diagram<CT> {
         self.add_node(CTNode::Z(phase.unwrap_or(TPhase::T0)))
     }
 
+    /// Get the number of empty wires attached to a node, if it exists.
+    pub fn arity_e(&self, id: NodeId) -> Option<usize> {
+        self.wires.get(id)
+            .and_then(|mb_nnb| mb_nnb.as_ref())
+            .map(|nnb| nnb.iter().filter(|w| w.is_e()).count())
+    }
+
+    /// Get the number of Hadamard wires attached to a node, if it exists.
+    pub fn arity_h(&self, id: NodeId) -> Option<usize> {
+        self.wires.get(id)
+            .and_then(|mb_nnb| mb_nnb.as_ref())
+            .map(|nnb| nnb.iter().filter(|w| w.is_h()).count())
+    }
+
+    /// Get the number of star wires attached to a node, if it exists.
+    pub fn arity_s(&self, id: NodeId) -> Option<usize> {
+        self.wires.get(id)
+            .and_then(|mb_nnb| mb_nnb.as_ref())
+            .map(|nnb| nnb.iter().filter(|w| w.is_s()).count())
+    }
+
     /// Get the number of empty wires connecting two nodes, if they both exist.
-    pub fn mutual_e_arity(&self, a: NodeId, b: NodeId) -> Option<usize> {
+    pub fn mutual_arity_e(&self, a: NodeId, b: NodeId) -> Option<usize> {
         self.has_node(b).then_some(())?;
         self.wires.get(a)
             .and_then(|mb_nnb| {
@@ -123,7 +144,7 @@ impl Diagram<CT> {
 
     /// Get the number of Hadamard wires connecting two nodes, if they both
     /// exist.
-    pub fn mutual_h_arity(&self, a: NodeId, b: NodeId) -> Option<usize> {
+    pub fn mutual_arity_h(&self, a: NodeId, b: NodeId) -> Option<usize> {
         self.has_node(b).then_some(())?;
         self.wires.get(a)
             .and_then(|mb_nnb| {
@@ -137,7 +158,7 @@ impl Diagram<CT> {
     }
 
     /// Get the number of star wires connecting two nodes, if they both exist.
-    pub fn mutual_s_arity(&self, a: NodeId, b: NodeId) -> Option<usize> {
+    pub fn mutual_arity_s(&self, a: NodeId, b: NodeId) -> Option<usize> {
         self.has_node(b).then_some(())?;
         self.wires.get(a)
             .and_then(|mb_nnb| {
@@ -155,7 +176,7 @@ impl Diagram<CT> {
     /// Returns the number of wires removed.
     ///
     /// Fails if either node does not exist.
-    pub fn remove_e_wires(
+    pub fn remove_wires_e(
         &mut self,
         a: NodeId,
         b: NodeId,
@@ -201,7 +222,7 @@ impl Diagram<CT> {
     /// Returns the number of wires removed.
     ///
     /// Fails if either node does not exist.
-    pub fn remove_h_wires(
+    pub fn remove_wires_h(
         &mut self,
         a: NodeId,
         b: NodeId,
@@ -246,7 +267,7 @@ impl Diagram<CT> {
     /// Returns the number of wires removed.
     ///
     /// Fails if either node does not exist.
-    pub fn remove_s_wires(
+    pub fn remove_wires_s(
         &mut self,
         a: NodeId,
         b: NodeId,
@@ -289,7 +310,7 @@ impl Diagram<CT> {
     /// Add a Hadamard wire between two nodes.
     ///
     /// Fails if one or neither of the nodes exist.
-    pub fn add_h_wire(&mut self, a: NodeId, b: NodeId) -> GraphResult<()> {
+    pub fn add_wire_h(&mut self, a: NodeId, b: NodeId) -> GraphResult<()> {
         self.get_node(a)
             .ok_or(AddWireMissingNode(a))
             .and_then(|node| {
@@ -313,7 +334,7 @@ impl Diagram<CT> {
     /// Add a star wire between two nodes.
     ///
     /// Fails if one or neither of the nodes exist.
-    pub fn add_s_wire(&mut self, a: NodeId, b: NodeId) -> GraphResult<()> {
+    pub fn add_wire_s(&mut self, a: NodeId, b: NodeId) -> GraphResult<()> {
         self.get_node(a)
             .ok_or(AddWireMissingNode(a))
             .and_then(|node| {
@@ -338,7 +359,7 @@ impl Diagram<CT> {
     /// and return the new node's ID.
     ///
     /// The pre-existing node cannot already be an input or output.
-    pub fn add_input_z_state(&mut self, id: NodeId, phase: TPhase)
+    pub fn add_input_state_z(&mut self, id: NodeId, phase: TPhase)
         -> GraphResult<NodeId>
     {
         self.get_node(id)
@@ -358,7 +379,7 @@ impl Diagram<CT> {
     /// pre-existing node and return the new node's ID.
     ///
     /// The pre-existing node cannot already be an input or output.
-    pub fn add_input_x_state(&mut self, id: NodeId, phase: TPhase)
+    pub fn add_input_state_x(&mut self, id: NodeId, phase: TPhase)
         -> GraphResult<NodeId>
     {
         self.get_node(id)
@@ -369,7 +390,7 @@ impl Diagram<CT> {
                     .ok_or(AddWireConnectedIO(id))
             })?;
         let input_id = self.add_node(CTNode::Z(phase));
-        self.add_h_wire(id, input_id)?;
+        self.add_wire_h(id, input_id)?;
         self.inputs.push(IONodeId::State(input_id));
         Ok(input_id)
     }
@@ -409,7 +430,7 @@ impl Diagram<CT> {
                     .ok_or(AddWireConnectedIO(id))
             })?;
         let output_id = self.add_node(CTNode::Z(phase));
-        self.add_h_wire(id, output_id)?;
+        self.add_wire_h(id, output_id)?;
         self.outputs.push(IONodeId::State(output_id));
         Ok(output_id)
     }
@@ -419,7 +440,7 @@ impl Diagram<CT> {
     /// The new spider will have the same node ID as the input or output.
     ///
     /// Fails if the given node ID does not exist or is not an input or output.
-    pub fn apply_z_state(&mut self, id: NodeId, phase: TPhase)
+    pub fn apply_state_z(&mut self, id: NodeId, phase: TPhase)
         -> GraphResult<()>
     {
         if let Some(n) = self.get_node(id) {
@@ -453,7 +474,7 @@ impl Diagram<CT> {
     /// The new spider will have the same node ID as the input or output.
     ///
     /// Fails if the given node ID does not exist or is not an input or output.
-    pub fn apply_x_state(&mut self, id: NodeId, phase: TPhase)
+    pub fn apply_state_x(&mut self, id: NodeId, phase: TPhase)
         -> GraphResult<()>
     {
         if let Some(n) = self.get_node(id) {
@@ -467,10 +488,10 @@ impl Diagram<CT> {
                 let mb_int = self.wires[id].as_ref().unwrap().first().copied();
                 if let Some(int_wire) = mb_int {
                     if int_wire.is_s() {
-                        self.remove_s_wires(id, int_wire.id(), None).unwrap();
+                        self.remove_wires_s(id, int_wire.id(), None).unwrap();
                         let new = self.add_node(CTNode::z0());
-                        self.add_s_wire(new, int_wire.id()).unwrap();
-                        self.add_h_wire(id, new).unwrap();
+                        self.add_wire_s(new, int_wire.id()).unwrap();
+                        self.add_wire_h(id, new).unwrap();
                     } else {
                         self.wires[id].as_mut().unwrap()
                             .first_mut().unwrap()
@@ -494,44 +515,44 @@ impl Diagram<CT> {
         }
     }
 
-    /// Like [`apply_z_state`][Self::apply_state], but using input qubit indices
+    /// Like [`apply_state_z`][Self::apply_state], but using input qubit indices
     /// rather than bare node IDs.
-    pub fn apply_z_state_input(&mut self, q: QubitId, phase: TPhase)
+    pub fn apply_state_z_input(&mut self, q: QubitId, phase: TPhase)
         -> GraphResult<()>
     {
         self.get_input_id(q)
             .ok_or(ApplyStateMissingQubit(q))
-            .and_then(|nid| self.apply_z_state(nid.id(), phase))
+            .and_then(|nid| self.apply_state_z(nid.id(), phase))
     }
 
-    /// Like [`apply_x_state`][Self::apply_state], but using input qubit indices
+    /// Like [`apply_state_x`][Self::apply_state], but using input qubit indices
     /// rather than bare node IDs.
-    pub fn apply_x_state_input(&mut self, q: QubitId, phase: TPhase)
+    pub fn apply_state_x_input(&mut self, q: QubitId, phase: TPhase)
         -> GraphResult<()>
     {
         self.get_input_id(q)
             .ok_or(ApplyStateMissingQubit(q))
-            .and_then(|nid| self.apply_x_state(nid.id(), phase))
+            .and_then(|nid| self.apply_state_x(nid.id(), phase))
     }
 
-    /// Like [`apply_z_state`][Self::apply_state], but using output qubit
+    /// Like [`apply_state_z`][Self::apply_state], but using output qubit
     /// indices rather than bare node IDs.
     pub fn apply_z_effect_output(&mut self, q: QubitId, phase: TPhase)
         -> GraphResult<()>
     {
         self.get_output_id(q)
             .ok_or(ApplyStateMissingQubit(q))
-            .and_then(|nid| self.apply_z_state(nid.id(), phase))
+            .and_then(|nid| self.apply_state_z(nid.id(), phase))
     }
 
-    /// Like [`apply_x_state`][Self::apply_state], but using output qubit
+    /// Like [`apply_state_x`][Self::apply_state], but using output qubit
     /// indices rather than bare node IDs.
     pub fn apply_x_effect_output(&mut self, q: QubitId, phase: TPhase)
         -> GraphResult<()>
     {
         self.get_output_id(q)
             .ok_or(ApplyStateMissingQubit(q))
-            .and_then(|nid| self.apply_x_state(nid.id(), phase))
+            .and_then(|nid| self.apply_state_x(nid.id(), phase))
     }
 
     /// Return an object containing an encoding of `self` in the [DOT

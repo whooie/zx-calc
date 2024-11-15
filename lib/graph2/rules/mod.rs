@@ -59,8 +59,11 @@ pub trait Rule<A> {
 }
 
 pub(crate) type NodePath<'a, N> = [(NodeId, &'a N)];
-pub(crate) type NodeSpec<'a, A, W, N> = fn(&Diagram<A>, &NodePath<'a, N>, &'a W, &'a N) -> bool;
-pub(crate) type NodeSpec0<'a, A, N> = fn(&Diagram<A>, NodeId, &'a N) -> bool;
+pub(crate) type NodeSpec<'a, A, W, N> =
+    fn(&Diagram<A>, &NodePath<'a, N>, &'a W, &'a N) -> bool;
+pub(crate) type NodeSpec0<'a, A, N> =
+    fn(&Diagram<A>, NodeId, &'a N) -> bool;
+
 pub(crate) type ZXNodeSpec0<'a> = NodeSpec0<'a, ZX, ZXNode>;
 pub(crate) type ZXNodeSpec<'a> = NodeSpec<'a, ZX, ZXWire, ZXNode>;
 pub(crate) type ZHNodeSpec0<'a> = NodeSpec0<'a, ZH, ZHNode>;
@@ -70,6 +73,94 @@ pub(crate) type CTNodeSpec<'a> = NodeSpec<'a, CT, CTWire, CTNode>;
 
 mod bialgebra;
 pub use bialgebra::*;
+mod color_flip;
+pub use color_flip::*;
+mod color_flip_all;
+pub use color_flip_all::*;
+mod fuse;
+pub use fuse::*;
+mod fuse_all;
+pub use fuse_all::*;
+mod fuse_multi;
+pub use fuse_multi::*;
+mod h2_hopf;
+pub use h2_hopf::*;
+mod h_absorb;
+pub use h_absorb::*;
+mod h_absorb_all;
+pub use h_absorb_all::*;
+mod h_avg;
+pub use h_avg::*;
+mod h_bialgebra;
+pub use h_bialgebra::*;
+mod h_euler;
+pub use h_euler::*;
+mod h_euler_color_flip;
+pub use h_euler_color_flip::*;
+mod h_explode;
+pub use h_explode::*;
+mod h_explode_all;
+pub use h_explode_all::*;
+mod h_fuse;
+pub use h_fuse::*;
+mod h_hopf;
+pub use h_hopf::*;
+mod h_intro;
+pub use h_intro::*;
+mod h_loop;
+pub use h_loop::*;
+mod h_loop_all;
+pub use h_loop_all::*;
+mod h_move;
+pub use h_move::*;
+mod h_multi_state;
+pub use h_multi_state::*;
+mod h_multi_state_all;
+pub use h_multi_state_all::*;
+mod h_self_loop;
+pub use h_self_loop::*;
+mod h_self_loop_all;
+pub use h_self_loop_all::*;
+mod h_state;
+pub use h_state::*;
+mod h_state_all;
+pub use h_state_all::*;
+mod h_state_copy;
+pub use h_state_copy::*;
+mod h_state_copy_all;
+pub use h_state_copy_all::*;
+mod h_state_mul;
+pub use h_state_mul::*;
+mod h_state_mul_all;
+pub use h_state_mul_all::*;
+mod hopf;
+pub use hopf::*;
+mod i_state;
+pub use i_state::*;
+mod i_state_all;
+pub use i_state_all::*;
+mod identity;
+pub use identity::*;
+mod identity_all;
+pub use identity_all::*;
+mod phase_neg;
+pub use phase_neg::*;
+mod phase_neg_all;
+pub use phase_neg_all::*;
+mod pi_commute;
+pub use pi_commute::*;
+mod scalar_pair;
+pub use scalar_pair::*;
+mod scalar_pair_all;
+pub use scalar_pair_all::*;
+mod spider_self_loop;
+pub use spider_self_loop::*;
+mod spider_self_loop_all;
+pub use spider_self_loop_all::*;
+mod state_copy;
+pub use state_copy::*;
+mod state_copy_all;
+pub use state_copy_all::*;
 
 impl<A> Diagram<A>
 where A: DiagramData

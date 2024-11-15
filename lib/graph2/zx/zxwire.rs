@@ -10,6 +10,13 @@ pub enum ZXWire {
 }
 
 impl ZXWire {
+    pub(crate) fn toggle(&mut self) {
+        match self {
+            Self::E(id) => { *self = Self::H(*id); },
+            Self::H(id) => { *self = Self::E(*id); },
+        }
+    }
+
     /// Return `true` if `self` is `E`.
     pub fn is_e(&self) -> bool { matches!(self, Self::E(_)) }
 

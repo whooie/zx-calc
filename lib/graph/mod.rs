@@ -60,8 +60,6 @@ pub mod clifft;
 
 pub mod rules;
 
-pub mod net;
-
 /// Identifies a node in a diagram by its index.
 pub type NodeId = usize;
 

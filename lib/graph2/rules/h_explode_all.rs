@@ -22,12 +22,16 @@ pub type XHPair = (NodeId, NodeId, bool);
 
 /// Output of [`HExplodeAll::find`].
 #[derive(Debug)]
-pub struct HExplodeAllData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HExplodeAllData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) groups: Vec<XHPair>, // [(x spider, h-box)]
 }
 
-impl<'a> HExplodeAllData<'a> {
+impl<'a, A> HExplodeAllData<'a, A>
+where A: DiagramData
+{
     /// Return the number of H-boxes found with connected X-spider states.
     pub fn len(&self) -> usize { self.groups.len() }
 
@@ -38,21 +42,21 @@ impl<'a> HExplodeAllData<'a> {
     pub fn groups(&self) -> &Vec<XHPair> { &self.groups }
 }
 
-impl RuleFinder for HExplodeAll {
-    type Output<'a> = HExplodeAllData<'a>;
+impl RuleFinder<ZH> for HExplodeAll {
+    type Output<'a> = HExplodeAllData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         let mut groups: Vec<XHPair> = Vec::new();
         let zero = Phase::zero();
         for (id, node) in dg.nodes_inner() {
             if node.is_h() {
                 let mb_x =
-                    dg.neighbors_of(id).unwrap()
+                    dg.neighbors(id).unwrap()
                     .find_map(|(id2, node2)| {
                         (
                             node2.is_x_and(|ph| ph == zero)
-                            && dg.arity(id2).unwrap() == 1
-                        ).then_some(id2)
+                            && dg.arity(*id2).unwrap() == 1
+                        ).then_some(*id2)
                     });
                 if let Some(x) = mb_x {
                     let is_had =
@@ -69,14 +73,14 @@ impl RuleFinder for HExplodeAll {
     }
 }
 
-impl<'a> Rule for HExplodeAllData<'a> {
+impl<'a> Rule<ZH> for HExplodeAllData<'a, ZH> {
     fn simplify(self) {
         let Self { dg, groups } = self;
         for (x, h, is_had) in groups.into_iter() {
             dg.remove_node(x).unwrap();
             if is_had {
                 let n = dg.get_node_mut(h).unwrap();
-                *n = Node::z();
+                *n = ZHNode::z();
             } else {
                 let (_, nnb) = dg.remove_node_nb(h).unwrap();
                 for nb in nnb.into_iter() {
@@ -84,7 +88,7 @@ impl<'a> Rule for HExplodeAllData<'a> {
                         dg.scalar *= 2.0;
                         continue;
                     }
-                    let z = dg.add_node(Node::z());
+                    let z = dg.add_node(ZHNode::z());
                     dg.add_wire(z, nb).unwrap();
                 }
                 dg.scalar *= std::f64::consts::SQRT_2;

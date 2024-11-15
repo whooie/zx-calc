@@ -74,8 +74,26 @@ impl Diagram<ZX> {
         self.add_node(ZXNode::X(phase.unwrap_or_else(Phase::zero)))
     }
 
+    /// Get the number of empty wires attached to a node, if it exists.
+    pub fn arity_e(&self, id: NodeId) -> Option<usize> {
+        self.wires.get(id)
+            .and_then(|mb_nnb| {
+                mb_nnb.as_ref()
+                    .map(|nnb| nnb.iter().filter(|nb| nb.is_e()).count())
+            })
+    }
+
+    /// Get the number of Hadamard wires attached to a node, if it exists.
+    pub fn arity_h(&self, id: NodeId) -> Option<usize> {
+        self.wires.get(id)
+            .and_then(|mb_nnb| {
+                mb_nnb.as_ref()
+                    .map(|nnb| nnb.iter().filter(|nb| nb.is_h()).count())
+            })
+    }
+
     /// Get the number of empty wires connecting two nodes, if they both exist.
-    pub fn mutual_e_arity(&self, a: NodeId, b: NodeId) -> Option<usize> {
+    pub fn mutual_arity_e(&self, a: NodeId, b: NodeId) -> Option<usize> {
         self.has_node(b).then_some(())?;
         self.wires.get(a)
             .and_then(|mb_nnb| {
@@ -90,7 +108,7 @@ impl Diagram<ZX> {
 
     /// Get the number of Hadamard wires connecting two nodes, if they both
     /// exist.
-    pub fn mutual_h_arity(&self, a: NodeId, b: NodeId) -> Option<usize> {
+    pub fn mutual_arity_h(&self, a: NodeId, b: NodeId) -> Option<usize> {
         self.has_node(b).then_some(())?;
         self.wires.get(a)
             .and_then(|mb_nnb| {
@@ -108,7 +126,7 @@ impl Diagram<ZX> {
     /// Returns the number of wires removed.
     ///
     /// Fails if either node does not exist.
-    pub fn remove_e_wires(
+    pub fn remove_wires_e(
         &mut self,
         a: NodeId,
         b: NodeId,
@@ -154,7 +172,7 @@ impl Diagram<ZX> {
     /// Returns the number of wires removed.
     ///
     /// Fails if either node does not exist.
-    pub fn remove_h_wires(
+    pub fn remove_wires_h(
         &mut self,
         a: NodeId,
         b: NodeId,
@@ -197,7 +215,7 @@ impl Diagram<ZX> {
     /// Add a Hadamard wire between two nodes.
     ///
     /// Fails if one or neither of the nodes exist.
-    pub fn add_h_wire(&mut self, a: NodeId, b: NodeId) -> GraphResult<()> {
+    pub fn add_wire_h(&mut self, a: NodeId, b: NodeId) -> GraphResult<()> {
         self.get_node(a)
             .ok_or(AddWireMissingNode(a))
             .and_then(|node| {

@@ -1,5 +1,5 @@
 use num_complex::Complex64 as C64;
-use crate::phase::Phase;
+use crate::{ c64_eq, phase::Phase };
 use super::*;
 
 /// Combine the arguments of two H-boxes connecting an X- and a Z-spider into a
@@ -12,32 +12,34 @@ pub struct HAvg;
 
 /// Output of [`HAvg::find`].
 #[derive(Debug)]
-pub struct HAvgData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HAvgData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) h1: (NodeId, C64),
     pub(crate) h2: (NodeId, C64),
     pub(crate) x: NodeId,
     pub(crate) z: (NodeId, Phase, usize),
 }
 
-impl RuleFinder for HAvg {
-    type Output<'a> = HAvgData<'a>;
+impl RuleFinder<ZH> for HAvg {
+    type Output<'a> = HAvgData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
-        let n0: PathNodeSpec = |dg, _, id, n| {
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
+        let n0: ZHNodeSpec0 = |dg, id, n| {
             n.is_x_and(|ph| ph == Phase::pi()) && dg.arity(id).unwrap() == 2
         };
-        let n1: PathNodeSpec = |dg, _, id, n| {
-            n.is_h() && dg.arity(id).unwrap() == 2
+        let n1: ZHNodeSpec = |dg, _, id, n| {
+            n.is_h() && dg.arity(*id).unwrap() == 2
         };
-        let n2: PathNodeSpec = |_, _, _, n| {
+        let n2: ZHNodeSpec = |_, _, _, n| {
             n.is_z_and(|ph| ph == Phase::pi())
         };
-        let n3: PathNodeSpec = |dg, p, id, n| {
-            n.is_h() && dg.arity(id).unwrap() == 2
-                && dg.mutual_arity(id, p[0].0).unwrap() == 1
+        let n3: ZHNodeSpec = |dg, p, id, n| {
+            n.is_h() && dg.arity(*id).unwrap() == 2
+                && dg.mutual_arity(*id, p[0].0).unwrap() == 1
         };
-        let p = dg.find_path(dg.nodes_inner(), &[n0, n1, n2, n3])?;
+        let p = dg.find_path(dg.nodes_inner(), n0, &[n1, n2, n3])?;
         let h1 = (p[1].0, p[1].1.arg().unwrap());
         let h2 = (p[3].0, p[3].1.arg().unwrap());
         let x = p[0].0;
@@ -46,13 +48,12 @@ impl RuleFinder for HAvg {
     }
 }
 
-impl<'a> Rule for HAvgData<'a> {
+impl<'a> Rule<ZH> for HAvgData<'a, ZH> {
     fn simplify(self) {
-        const EPSILON: f64 = 1e-12;
         let Self { dg, h1, h2, x, z } = self;
         dg.remove_node(x).unwrap();
-        let is_had1 = (h1.1 + 1.0).norm() < EPSILON;
-        let is_had2 = (h2.1 + 1.0).norm() < EPSILON;
+        let is_had1 = c64_eq(h1.1, -1.0);
+        let is_had2 = c64_eq(h2.1, -1.0);
         if is_had1 && is_had2 {
             dg.remove_node(h1.0).unwrap();
             dg.remove_node(h2.0).unwrap();
@@ -72,7 +73,7 @@ impl<'a> Rule for HAvgData<'a> {
                 dg.remove_node(h2.0).unwrap();
                 dg.get_node_mut(h1.0).unwrap()
             };
-        *node = Node::H((h1.1 + h2.1) / 2.0);
+        *node = ZHNode::H((h1.1 + h2.1) / 2.0);
         dg.scalar *= scalar;
     }
 }

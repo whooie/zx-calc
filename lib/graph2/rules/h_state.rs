@@ -1,5 +1,5 @@
 use num_complex::Complex64 as C64;
-use crate::phase::Phase;
+use crate::{ c64_eq, phase::Phase };
 use super::*;
 
 /// Convert a unary H-box into a unary Z-spider.
@@ -11,51 +11,52 @@ pub struct HState;
 
 /// Output of [`HState::find`].
 #[derive(Debug)]
-pub struct HStateData<'a> {
-    pub(crate) dg: &'a mut Diagram,
+pub struct HStateData<'a, A>
+where A: DiagramData
+{
+    pub(crate) dg: &'a mut Diagram<A>,
     pub(crate) h: NodeId,
     pub(crate) arg: C64,
 }
 
-impl RuleFinder for HState {
-    type Output<'a> = HStateData<'a>;
+impl RuleFinder<ZH> for HState {
+    type Output<'a> = HStateData<'a, ZH>;
 
-    fn find(self, dg: &mut Diagram) -> Option<Self::Output<'_>> {
-        const EPSILON: f64 = 1e-12;
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
         const I: C64 = C64 { re: 0.0, im: 1.0 };
         for (id, node) in dg.nodes_inner() {
-            if node.is_h() && dg.arity(id).unwrap() == 1 {
+            if node.is_h() && dg.arity(id).unwrap() == 1
+                && (
+                    node.has_arg(1.0)
+                    || node.has_arg(-1.0)
+                    || node.has_arg(I)
+                    || node.has_arg(-I)
+                )
+            {
                 let arg = node.arg().unwrap();
-                if (arg + 1.0).norm() < EPSILON
-                    || (arg - 1.0).norm() < EPSILON
-                    || (arg + I).norm() < EPSILON
-                    || (arg - I).norm() < EPSILON
-                {
-                    return Some(HStateData { dg, h: id, arg });
-                }
+                return Some(HStateData { dg, h: id, arg });
             }
         }
         None
     }
 }
 
-impl<'a> Rule for HStateData<'a> {
+impl<'a> Rule<ZH> for HStateData<'a, ZH> {
     fn simplify(self) {
-        const EPSILON: f64 = 1e-12;
         const I: C64 = C64 { re: 0.0, im: 1.0 };
         let Self { dg, h, arg } = self;
         let ph =
-            if (arg + 1.0).norm() < EPSILON {
+            if c64_eq(arg, -1.0) {
                 Phase::pi()
-            } else if (arg - 1.0).norm() < EPSILON {
+            } else if c64_eq(arg, 1.0) {
                 Phase::zero()
-            } else if (arg + I).norm() < EPSILON {
+            } else if c64_eq(arg, -I) {
                 -Phase::pi2()
             } else {
                 Phase::pi2()
             };
         let n = dg.get_node_mut(h).unwrap();
-        *n = Node::Z(ph);
+        *n = ZHNode::Z(ph);
     }
 }
 
