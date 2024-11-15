@@ -1,5 +1,5 @@
 use num_complex::Complex64 as C64;
-use crate::phase::Phase;
+use crate::{ c64_eq, phase::Phase };
 use super::dense::{ De, Q, Tensor };
 use super::sparse::{ Sp, State, Basis, KetBra, Terms };
 
@@ -480,9 +480,8 @@ where A: ElementData
     pub fn scalar_mul_mut<C>(&mut self, scalar: C)
     where C: Into<C64>
     {
-        const EPSILON: f64 = 1e-12;
         let scalar = scalar.into();
-        if (scalar - 1.0).norm() < EPSILON { return; }
+        if c64_eq(scalar, 1.0) { return; }
         self.data.scalar_mul(scalar);
         self.kind = Kind::Unknown;
     }

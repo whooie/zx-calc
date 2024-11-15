@@ -39,6 +39,15 @@ pub mod graph2;
 pub mod indexmap;
 pub(crate) mod vizdefs;
 
+pub(crate) fn c64_eq<T, U>(a: T, b: U) -> bool
+where
+    T: Into<num_complex::Complex64>,
+    U: Into<num_complex::Complex64>,
+{
+    const EPSILON: f64 = 1e-12;
+    (a.into() - b.into()).norm() < EPSILON
+}
+
 /// Re-exported for use with the [`c!`] macro.
 pub extern crate num_complex;
 

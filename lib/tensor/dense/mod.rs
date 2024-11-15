@@ -3,7 +3,7 @@
 use ndarray::{ self as nd, Dimension };
 use num_complex::Complex64 as C64;
 use thiserror::Error;
-use crate::phase::Phase;
+use crate::{ c64_eq, phase::Phase };
 use super::ElementData;
 
 #[derive(Debug, Error)]
@@ -148,7 +148,6 @@ impl ElementData for De {
         I: IntoIterator<Item = usize>,
         J: IntoIterator<Item = usize>,
     {
-        const EPSILON: f64 = 1e-12;
         let mut indices: Vec<Q> = Vec::new();
         let arg = a.unwrap_or_else(|| -C64::from(1.0));
         outs.into_iter()
@@ -166,7 +165,7 @@ impl ElementData for De {
             Self(data)
         } else {
             let norm =
-                if indices.len() == 2 && (arg + 1.0).norm() < EPSILON {
+                if indices.len() == 2 && c64_eq(arg, -1.0) {
                     std::f64::consts::FRAC_1_SQRT_2
                 } else {
                     1.0
@@ -230,9 +229,8 @@ impl ElementData for De {
     fn scalar_mul<C>(&mut self, scalar: C)
     where C: Into<C64>
     {
-        const EPSILON: f64 = 1e-12;
         let scalar = scalar.into();
-        if (scalar - 1.0).norm() < EPSILON { return; }
+        if c64_eq(scalar, 1.0) { return; }
         self.0.scalar_mul_inplace(scalar);
     }
 

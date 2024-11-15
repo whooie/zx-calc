@@ -4,7 +4,7 @@ use itertools::Itertools;
 use ndarray as nd;
 use num_complex::Complex64 as C64;
 use thiserror::Error;
-use crate::phase::Phase;
+use crate::{ c64_eq, phase::Phase };
 use super::ElementData;
 
 #[derive(Debug, Error)]
@@ -33,8 +33,7 @@ impl From<KetBra> for Sp {
 
 impl From<C64> for Sp {
     fn from(a: C64) -> Self {
-        const EPSILON: f64 = 1e-12;
-        if a.norm() < EPSILON { Self(vec![]) } else { Self(vec![a.into()]) }
+        if c64_eq(a, 0.0) { Self(vec![]) } else { Self(vec![a.into()]) }
     }
 }
 
@@ -166,7 +165,6 @@ impl ElementData for Sp {
         I: IntoIterator<Item = usize>,
         J: IntoIterator<Item = usize>,
     {
-        const EPSILON: f64 = 1e-12;
         const STATES: [State; 2] = [State::Zero, State::One];
         let a = a.unwrap_or_else(|| -C64::from(1.0));
         let ket_idx: Vec<usize> = collect_unique(outs);
@@ -204,9 +202,7 @@ impl ElementData for Sp {
                 })
                 .collect();
             Self(terms)
-        } else if ket_idx.len() + bra_idx.len() == 2
-            && (a + 1.0).norm() < EPSILON
-        {
+        } else if ket_idx.len() + bra_idx.len() == 2 && c64_eq(a, -1.0) {
             use State::*;
             let ampl = C64::from(std::f64::consts::FRAC_1_SQRT_2);
             let terms: Vec<KetBra> =
@@ -308,9 +304,8 @@ impl ElementData for Sp {
     fn scalar_mul<C>(&mut self, scalar: C)
     where C: Into<C64>
     {
-        const EPSILON: f64 = 1e-12;
         let scalar = scalar.into();
-        if (scalar - 1.0).norm() < EPSILON { return; }
+        if c64_eq(scalar, 1.0) { return; }
         self.0.iter_mut().for_each(|term| { term.ampl *= scalar; });
     }
 
@@ -425,7 +420,6 @@ impl Sp {
     /// Combine like terms in place, ensuring minimal storage without changing
     /// basis.
     pub fn simplify(&mut self) {
-        const EPSILON: f64 = 1e-12;
         let n = self.0.len();
         let mut remove: Vec<bool> = vec![false; n];
         let mut term0: &KetBra;
@@ -442,7 +436,7 @@ impl Sp {
                 })
                 .sum();
             self.0[k].ampl += da;
-            remove[k] = self.0[k].ampl.norm() < EPSILON;
+            remove[k] = c64_eq(self.0[k].ampl, 0.0);
         }
         remove.into_iter().enumerate().rev()
             .for_each(|(k, r)| { if r { self.0.swap_remove(k); } });

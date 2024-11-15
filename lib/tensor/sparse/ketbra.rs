@@ -1,6 +1,7 @@
 use std::fmt;
 use itertools::Itertools;
 use num_complex::Complex64 as C64;
+use crate::c64_eq;
 use super::{ Basis, SpError, SpResult, State, States, StatesIter, StateOrd };
 use SpError::*;
 
@@ -15,8 +16,7 @@ pub struct KetBra {
 
 impl PartialEq for KetBra {
     fn eq(&self, other: &Self) -> bool {
-        const EPSILON: f64 = 1e-12;
-        (self.ampl - other.ampl).norm() < EPSILON
+        c64_eq(self.ampl, other.ampl)
             && self.ket == other.ket
             && self.bra == other.bra
     }
