@@ -2012,3 +2012,1022 @@ macro_rules! graph_diagram {
 
 pub use graph_diagram;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        graph::{ Spider, ZHNode },
+        phase::Phase,
+    };
+
+    fn rev<T, U>(pair: (T, U)) -> (U, T) { (pair.1, pair.0) }
+
+    fn build_simple() -> Diagram<ZH> {
+        let mut diagram = Diagram::<ZH>::new();
+        let z0 = diagram.add_node(ZHNode::Z(Phase::new(1, 6))); // 0
+        let z1 = diagram.add_node(ZHNode::Z(Phase::new(1, 3))); // 1
+        diagram.add_input_wire(z0).unwrap();                    // 2, (0, 2)
+        diagram.add_input_wire(z0).unwrap();                    // 3, (0, 3)
+        diagram.add_input_wire(z0).unwrap();                    // 4, (0, 4)
+        let x0 = diagram.add_node(ZHNode::X(Phase::new(7, 8))); // 5
+        diagram.add_output_wire(z0).unwrap();                   // 6, (0, 6)
+        diagram.add_output_wire(z1).unwrap();                   // 7, (1, 7)
+        let h0 = diagram.add_node(ZHNode::h());                 // 8
+        diagram.add_wire(z0, z1).unwrap();                      // (0, 1)
+        diagram.add_wire(z0, z1).unwrap();                      // (0, 1)
+        diagram.add_wire(z0, h0).unwrap();                      // (0, 8)
+        diagram.add_wire(h0, x0).unwrap();                      // (8, 5)
+        diagram
+    }
+
+    #[test]
+    fn counts() {
+        let mut dg = build_simple();
+        assert_eq!(dg.count_nodes(),   9);
+        assert_eq!(dg.count_z(),       2);
+        assert_eq!(dg.count_x(),       1);
+        assert_eq!(dg.count_h(),       1);
+        assert_eq!(dg.count_inputs(),  3);
+        assert_eq!(dg.count_outputs(), 2);
+        assert_eq!(dg.count_spiders(), 3);
+        assert_eq!(dg.count_wires(),   9);
+        dg.remove_node(3).unwrap();
+        assert_eq!(dg.count_nodes(),   8);
+        assert_eq!(dg.count_z(),       2);
+        assert_eq!(dg.count_x(),       1);
+        assert_eq!(dg.count_h(),       1);
+        assert_eq!(dg.count_inputs(),  2);
+        assert_eq!(dg.count_outputs(), 2);
+        assert_eq!(dg.count_spiders(), 3);
+        assert_eq!(dg.count_wires(),   8);
+        dg.remove_node(8).unwrap();
+        assert_eq!(dg.count_nodes(),   7);
+        assert_eq!(dg.count_z(),       2);
+        assert_eq!(dg.count_x(),       1);
+        assert_eq!(dg.count_h(),       0);
+        assert_eq!(dg.count_inputs(),  2);
+        assert_eq!(dg.count_outputs(), 2);
+        assert_eq!(dg.count_spiders(), 3);
+        assert_eq!(dg.count_wires(),   6);
+        dg.add_output_wire(1).unwrap();
+        assert_eq!(dg.count_nodes(),   8);
+        assert_eq!(dg.count_z(),       2);
+        assert_eq!(dg.count_x(),       1);
+        assert_eq!(dg.count_h(),       0);
+        assert_eq!(dg.count_inputs(),  2);
+        assert_eq!(dg.count_outputs(), 3);
+        assert_eq!(dg.count_spiders(), 3);
+        assert_eq!(dg.count_wires(),   7);
+
+        let mut dg = Diagram::<ZH>::new();
+        let z = dg.add_node(ZHNode::z());
+        dg.add_wire(z, z).unwrap();
+        assert_eq!(dg.count_nodes(),   1);
+        assert_eq!(dg.count_z(),       1);
+        assert_eq!(dg.count_x(),       0);
+        assert_eq!(dg.count_h(),       0);
+        assert_eq!(dg.count_inputs(),  0);
+        assert_eq!(dg.count_outputs(), 0);
+        assert_eq!(dg.count_spiders(), 1);
+        assert_eq!(dg.count_wires(),   1);
+        dg.remove_node(z).unwrap();
+        assert_eq!(dg.count_nodes(),   0);
+        assert_eq!(dg.count_z(),       0);
+        assert_eq!(dg.count_x(),       0);
+        assert_eq!(dg.count_h(),       0);
+        assert_eq!(dg.count_inputs(),  0);
+        assert_eq!(dg.count_outputs(), 0);
+        assert_eq!(dg.count_spiders(), 0);
+        assert_eq!(dg.count_wires(),   0);
+    }
+
+    #[test]
+    fn get_node() {
+        let dg = build_simple();
+        assert_eq!(dg.get_node(0), Some(&ZHNode::Z(Phase::new(1, 6))));
+        assert_eq!(dg.get_node(1), Some(&ZHNode::Z(Phase::new(1, 3))));
+        assert_eq!(dg.get_node(2), Some(&ZHNode::Input));
+        assert_eq!(dg.get_node(3), Some(&ZHNode::Input));
+        assert_eq!(dg.get_node(4), Some(&ZHNode::Input));
+        assert_eq!(dg.get_node(5), Some(&ZHNode::X(Phase::new(7, 8))));
+        assert_eq!(dg.get_node(6), Some(&ZHNode::Output));
+        assert_eq!(dg.get_node(7), Some(&ZHNode::Output));
+        assert_eq!(dg.get_node(8), Some(&ZHNode::H((-1.0).into())));
+        assert_eq!(dg.get_node(9), None);
+    }
+
+    #[test]
+    fn arity() {
+        let dg = build_simple();
+        assert_eq!(dg.arity(0), Some(7));
+        assert_eq!(dg.arity(1), Some(3));
+        assert_eq!(dg.arity(2), Some(1));
+        assert_eq!(dg.arity(3), Some(1));
+        assert_eq!(dg.arity(4), Some(1));
+        assert_eq!(dg.arity(5), Some(1));
+        assert_eq!(dg.arity(6), Some(1));
+        assert_eq!(dg.arity(7), Some(1));
+        assert_eq!(dg.arity(8), Some(2));
+        assert_eq!(dg.arity(9), None);
+    }
+
+    #[test]
+    fn is_connected() {
+        let mut dg = build_simple();
+        dg.add_node(ZHNode::x()); // 9
+        assert_eq!(dg.is_connected(0), Some(true));
+        assert_eq!(dg.is_connected(1), Some(true));
+        assert_eq!(dg.is_connected(2), Some(true));
+        assert_eq!(dg.is_connected(3), Some(true));
+        assert_eq!(dg.is_connected(4), Some(true));
+        assert_eq!(dg.is_connected(5), Some(true));
+        assert_eq!(dg.is_connected(6), Some(true));
+        assert_eq!(dg.is_connected(7), Some(true));
+        assert_eq!(dg.is_connected(8), Some(true));
+        assert_eq!(dg.is_connected(9), Some(false));
+        assert_eq!(dg.is_connected(10), None);
+    }
+
+    #[test]
+    fn mutual_arity() {
+        let mut dg = build_simple();
+        let z = dg.add_node(ZHNode::z()); // 9
+        dg.add_wire(z, z).unwrap();
+        assert_eq!(dg.mutual_arity(0, 2), Some(1));
+        assert_eq!(dg.mutual_arity(0, 3), Some(1));
+        assert_eq!(dg.mutual_arity(0, 4), Some(1));
+        assert_eq!(dg.mutual_arity(0, 6), Some(1));
+        assert_eq!(dg.mutual_arity(1, 7), Some(1));
+        assert_eq!(dg.mutual_arity(0, 1), Some(2));
+        assert_eq!(dg.mutual_arity(0, 8), Some(1));
+        assert_eq!(dg.mutual_arity(8, 5), Some(1));
+        assert_eq!(dg.mutual_arity(0, 2), Some(1));
+        assert_eq!(dg.mutual_arity(1, 2), Some(0));
+        assert_eq!(dg.mutual_arity(1, 8), Some(0));
+        assert_eq!(dg.mutual_arity(2, 3), Some(0));
+        assert_eq!(dg.mutual_arity(z, z), Some(1));
+        assert_eq!(dg.mutual_arity(0, 10), None);
+        assert_eq!(dg.mutual_arity(10, 0), None);
+        assert_eq!(dg.mutual_arity(10, 11), None);
+    }
+
+    #[test]
+    fn remove_node() {
+        let mut dg = build_simple();
+        let z = dg.add_node(ZHNode::z()); // 9
+        dg.add_wire(z, z).unwrap();
+        assert_eq!(dg.remove_node(3).unwrap(), ZHNode::Input);
+        assert_eq!(dg.remove_node(8).unwrap(), ZHNode::H((-1.0).into()));
+        assert_eq!(dg.remove_node(6).unwrap(), ZHNode::Output);
+        assert_eq!(dg.remove_node(z).unwrap(), ZHNode::z());
+        assert!(dg.remove_node(3).is_err());
+        assert!(dg.remove_node(9).is_err());
+        assert_eq!(dg.add_node(ZHNode::h()), 9);
+    }
+
+    #[test]
+    fn add_wire() {
+        let mut dg = build_simple();
+        assert!(dg.add_wire(0, 5).is_ok());
+        assert!(dg.add_wire(1, 8).is_ok());
+        assert!(dg.add_wire(0, 2).is_err());
+        assert!(dg.add_wire(1, 6).is_err());
+        assert!(dg.add_wire(3, 7).is_err());
+        assert!(dg.add_wire(0, 9).is_err());
+        assert!(dg.add_wire(9, 10).is_err());
+    }
+
+    #[test]
+    fn add_input_wire() {
+        let mut dg = build_simple();
+        assert_eq!(dg.add_input_wire(5).unwrap(), 9);
+        assert_eq!(dg.add_input_wire(0).unwrap(), 10);
+        dg.remove_node(2).unwrap();
+        assert_eq!(dg.add_input_wire(0).unwrap(), 2);
+        assert_eq!(dg.count_inputs(), 5);
+        assert!(dg.add_input_wire(11).is_err());
+        assert!(dg.add_input_wire(2).is_err());
+    }
+
+    #[test]
+    fn add_output_wire() {
+        let mut dg = build_simple();
+        assert_eq!(dg.add_output_wire(5).unwrap(), 9);
+        assert_eq!(dg.add_output_wire(0).unwrap(), 10);
+        dg.remove_node(6).unwrap();
+        assert_eq!(dg.add_output_wire(0).unwrap(), 6);
+        assert_eq!(dg.count_outputs(), 4);
+        assert!(dg.add_output_wire(11).is_err());
+        assert!(dg.add_output_wire(2).is_err());
+    }
+
+    #[test]
+    fn remove_wires() {
+        let mut dg = build_simple();
+        assert_eq!(dg.count_wires(), 9);
+        assert_eq!(dg.mutual_arity(0, 1), Some(2));
+        (0..5).for_each(|_| { dg.add_wire(0, 1).unwrap(); });
+        assert_eq!(dg.count_wires(), 14);
+        assert_eq!(dg.mutual_arity(0, 1), Some(7));
+        assert_eq!(dg.remove_wires(0, 1, Some(2)).unwrap(), 2);
+        assert_eq!(dg.count_wires(), 12);
+        assert_eq!(dg.mutual_arity(0, 1), Some(5));
+        assert_eq!(dg.remove_wires(0, 1, None).unwrap(), 5);
+        assert_eq!(dg.count_wires(), 7);
+        assert_eq!(dg.mutual_arity(0, 1), Some(0));
+        (0..3).for_each(|_| { dg.add_wire(0, 0).unwrap(); });
+        assert_eq!(dg.count_wires(), 10);
+        assert_eq!(dg.mutual_arity(0, 0), Some(3));
+        assert_eq!(dg.remove_wires(0, 0, None).unwrap(), 3);
+        assert_eq!(dg.count_wires(), 7);
+        assert_eq!(dg.mutual_arity(0, 0), Some(0));
+    }
+
+    #[test]
+    fn apply_state() {
+        let mut dg = build_simple();
+
+        assert_eq!(dg.count_nodes(),   9);
+        assert_eq!(dg.count_inputs(),  3);
+        assert_eq!(dg.count_outputs(), 2);
+        assert_eq!(dg.count_z(),       2);
+        assert_eq!(dg.count_x(),       1);
+
+        dg.apply_state_input(1, Spider::Z(Phase::pi())).unwrap();
+        assert!(dg.apply_state_input(3, Spider::Z(Phase::zero())).is_err());
+        assert!(dg.apply_state(0, Spider::Z(Phase::zero())).is_err());
+        assert!(dg.apply_state(10, Spider::Z(Phase::zero())).is_err());
+
+        assert_eq!(dg.count_nodes(),       9);
+        assert_eq!(dg.count_inputs(),      3);
+        assert_eq!(dg.count_free_inputs(), 2);
+        assert_eq!(dg.count_outputs(),     2);
+        assert_eq!(dg.count_z(),           3);
+        assert_eq!(dg.count_x(),           1);
+
+        let inputs: Vec<(QubitId, IONodeId)> =
+            dg.inputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let inputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(2)),
+                (1, IONodeId::State(3)),
+                (2, IONodeId::Free(4)),
+            ];
+        assert_eq!(inputs, inputs_expected);
+
+        dg.apply_effect_output(1, Spider::X(Phase::new(1, 3))).unwrap();
+        assert!(dg.apply_effect_output(2, Spider::X(Phase::zero())).is_err());
+
+        let outputs: Vec<(QubitId, IONodeId)> =
+            dg.outputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let outputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(6)),
+                (1, IONodeId::State(7)),
+            ];
+        assert_eq!(outputs, outputs_expected);
+
+        assert_eq!(dg.count_nodes(),        9);
+        assert_eq!(dg.count_inputs(),       3);
+        assert_eq!(dg.count_outputs(),      2);
+        assert_eq!(dg.count_free_outputs(), 1);
+        assert_eq!(dg.count_z(),            3);
+        assert_eq!(dg.count_x(),            2);
+    }
+
+    #[test]
+    fn apply_bell() {
+        let mut dg = build_simple();
+
+        assert_eq!(dg.count_nodes(),   9);
+        assert_eq!(dg.count_inputs(),  3);
+        assert_eq!(dg.count_outputs(), 2);
+        assert_eq!(dg.count_z(),       2);
+        assert_eq!(dg.count_x(),       1);
+        assert_eq!(dg.count_wires(),   9);
+
+        assert!(dg.apply_bell_input(0, 2).is_ok());
+
+        let inputs: Vec<(QubitId, IONodeId)> =
+            dg.inputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let inputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::State(2)),
+                (1, IONodeId::Free(3)),
+                (2, IONodeId::State(4)),
+            ];
+        assert_eq!(inputs, inputs_expected);
+
+        assert_eq!(dg.count_nodes(),       9);
+        assert_eq!(dg.count_inputs(),      3);
+        assert_eq!(dg.count_free_inputs(), 1);
+        assert_eq!(dg.count_outputs(),     2);
+        assert_eq!(dg.count_z(),           4);
+        assert_eq!(dg.count_x(),           1);
+        assert_eq!(dg.count_wires(),       10);
+
+        assert!(dg.apply_bell_output(0, 1).is_ok());
+
+        let outputs: Vec<(QubitId, IONodeId)> =
+            dg.outputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let outputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::State(6)),
+                (1, IONodeId::State(7)),
+            ];
+        assert_eq!(outputs, outputs_expected);
+
+        assert_eq!(dg.count_nodes(),        9);
+        assert_eq!(dg.count_inputs(),       3);
+        assert_eq!(dg.count_outputs(),      2);
+        assert_eq!(dg.count_free_outputs(), 0);
+        assert_eq!(dg.count_z(),            6);
+        assert_eq!(dg.count_x(),            1);
+        assert_eq!(dg.count_wires(),        11);
+
+        assert!(dg.apply_bell(0, 1).is_err());
+        assert!(dg.apply_bell(20, 21).is_err());
+        assert!(dg.apply_bell(3, 21).is_err());
+        assert!(dg.apply_bell(2, 4).is_err());
+    }
+
+    #[test]
+    fn iter_nodes() {
+        let mut dg = build_simple();
+
+        let nodes: Vec<(NodeId, ZHNode)> =
+            dg.nodes().map(|(id, n)| (id, *n)).collect();
+        let nodes_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                (0, ZHNode::Z(Phase::new(1, 6))),
+                (1, ZHNode::Z(Phase::new(1, 3))),
+                (2, ZHNode::Input),
+                (3, ZHNode::Input),
+                (4, ZHNode::Input),
+                (5, ZHNode::X(Phase::new(7, 8))),
+                (6, ZHNode::Output),
+                (7, ZHNode::Output),
+                (8, ZHNode::H((-1.0).into())),
+            ];
+        assert_eq!(nodes, nodes_expected);
+
+        dg.remove_node(3).unwrap();
+        dg.remove_node(8).unwrap();
+
+        let nodes: Vec<(NodeId, ZHNode)> =
+            dg.nodes().map(|(id, n)| (id, *n)).collect();
+        let nodes_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                (0, ZHNode::Z(Phase::new(1, 6))),
+                (1, ZHNode::Z(Phase::new(1, 3))),
+                (2, ZHNode::Input),
+                (4, ZHNode::Input),
+                (5, ZHNode::X(Phase::new(7, 8))),
+                (6, ZHNode::Output),
+                (7, ZHNode::Output),
+            ];
+        assert_eq!(nodes, nodes_expected);
+    }
+
+    #[test]
+    fn iter_nodes_inner() {
+        let mut dg = build_simple();
+
+        let nodes_inner: Vec<(NodeId, ZHNode)> =
+            dg.nodes_inner().map(|(id, n)| (id, *n)).collect();
+        let nodes_inner_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                (0, ZHNode::Z(Phase::new(1, 6))),
+                (1, ZHNode::Z(Phase::new(1, 3))),
+                (5, ZHNode::X(Phase::new(7, 8))),
+                (8, ZHNode::H((-1.0).into())),
+            ];
+        assert_eq!(nodes_inner, nodes_inner_expected);
+
+        dg.remove_node(3).unwrap();
+        dg.remove_node(8).unwrap();
+
+        let nodes_inner: Vec<(NodeId, ZHNode)> =
+            dg.nodes_inner().map(|(id, n)| (id, *n)).collect();
+        let nodes_inner_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                (0, ZHNode::Z(Phase::new(1, 6))),
+                (1, ZHNode::Z(Phase::new(1, 3))),
+                (5, ZHNode::X(Phase::new(7, 8))),
+            ];
+        assert_eq!(nodes_inner, nodes_inner_expected);
+    }
+
+    #[test]
+    fn iter_inputs() {
+        let mut dg = build_simple();
+
+        let inputs: Vec<(QubitId, IONodeId)> =
+            dg.inputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let inputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(2)),
+                (1, IONodeId::Free(3)),
+                (2, IONodeId::Free(4)),
+            ];
+        assert_eq!(inputs, inputs_expected);
+
+        dg.remove_node(3).unwrap();
+        dg.remove_node(8).unwrap();
+
+        let inputs: Vec<(QubitId, IONodeId)> =
+            dg.inputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let inputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(2)),
+                (1, IONodeId::Free(4)),
+            ];
+        assert_eq!(inputs, inputs_expected);
+    }
+
+    #[test]
+    fn iter_outputs() {
+        let mut dg = build_simple();
+
+        let outputs: Vec<(QubitId, IONodeId)> =
+            dg.outputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let outputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(6)),
+                (1, IONodeId::Free(7)),
+            ];
+        assert_eq!(outputs, outputs_expected);
+
+        dg.remove_node(3).unwrap();
+        dg.remove_node(8).unwrap();
+        dg.remove_node(6).unwrap();
+
+        let outputs: Vec<(QubitId, IONodeId)> =
+            dg.outputs().map(|(qid, ioid)| (qid, *ioid)).collect();
+        let outputs_expected: Vec<(QubitId, IONodeId)> =
+            vec![
+                (0, IONodeId::Free(7)),
+            ];
+        assert_eq!(outputs, outputs_expected);
+    }
+
+    #[test]
+    fn iter_wires() {
+        let mut dg = build_simple();
+
+        let wires: Vec<(NodeId, NodeId)> =
+            dg.wires().map(|(l, r)| (l, *r)).collect();
+        let wires_expected: Vec<(NodeId, NodeId)> =
+            vec![
+                (0, 1),
+                (0, 1),
+                (0, 2),
+                (0, 3),
+                (0, 4),
+                (0, 6),
+                (0, 8),
+                (1, 7),
+                (5, 8),
+            ];
+        assert_eq!(wires.len(), wires_expected.len());
+        assert!(
+            wires.into_iter()
+                .all(|pair| {
+                    wires_expected.contains(&pair)
+                        || wires_expected.contains(&rev(pair))
+                })
+        );
+
+        dg.remove_node(3).unwrap();
+        dg.remove_node(8).unwrap();
+        dg.remove_node(6).unwrap();
+
+        let wires: Vec<(NodeId, NodeId)> =
+            dg.wires().map(|(l, r)| (l, *r)).collect();
+        let wires_expected: Vec<(NodeId, NodeId)> =
+            vec![
+                (0, 1),
+                (0, 1),
+                (0, 2),
+                (0, 4),
+                (1, 7),
+            ];
+        assert_eq!(wires.len(), wires_expected.len());
+        assert!(
+            wires.into_iter()
+                .all(|pair| {
+                    wires_expected.contains(&pair)
+                        || wires_expected.contains(&rev(pair))
+                })
+        );
+    }
+
+    #[test]
+    fn iter_wires_inner() {
+        fn rev<T, U>(pair: (T, U)) -> (U, T) { (pair.1, pair.0) }
+
+        let mut dg = build_simple();
+
+        let wires_inner: Vec<(NodeId, NodeId)> =
+            dg.wires_inner().map(|(l, r)| (l, *r)).collect();
+        let wires_inner_expected: Vec<(NodeId, NodeId)> =
+            vec![
+                (0, 1),
+                (0, 1),
+                (0, 8),
+                (5, 8),
+            ];
+        assert_eq!(wires_inner.len(), wires_inner_expected.len());
+        assert!(
+            wires_inner.into_iter()
+                .all(|pair| {
+                    wires_inner_expected.contains(&pair)
+                        || wires_inner_expected.contains(&rev(pair))
+                })
+        );
+
+        dg.remove_node(3).unwrap();
+        dg.remove_node(8).unwrap();
+        dg.remove_node(6).unwrap();
+
+        let wires_inner: Vec<(NodeId, NodeId)> =
+            dg.wires_inner().map(|(l, r)| (l, *r)).collect();
+        let wires_inner_expected: Vec<(NodeId, NodeId)> =
+            vec![
+                (0, 1),
+                (0, 1),
+            ];
+        assert_eq!(wires_inner.len(), wires_inner_expected.len());
+        assert!(
+            wires_inner.into_iter()
+                .all(|pair| {
+                    wires_inner_expected.contains(&pair)
+                        || wires_inner_expected.contains(&rev(pair))
+                })
+        );
+    }
+
+    #[test]
+    fn iter_neighbors() {
+        let mut dg = build_simple();
+
+        let neighbors: Vec<(NodeId, ZHNode)> =
+            dg.neighbors(0).unwrap().map(|(nb, n)| (*nb, *n)).collect();
+        let neighbors_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                (2, ZHNode::Input),
+                (3, ZHNode::Input),
+                (4, ZHNode::Input),
+                (6, ZHNode::Output),
+                (1, ZHNode::Z(Phase::new(1, 3))),
+                (1, ZHNode::Z(Phase::new(1, 3))),
+                (8, ZHNode::H((-1.0).into())),
+            ];
+        assert_eq!(neighbors.len(), neighbors_expected.len());
+        assert!(
+            neighbors.into_iter()
+                .all(|x| neighbors_expected.contains(&x))
+        );
+
+        dg.remove_node(3).unwrap();
+        dg.remove_node(8).unwrap();
+        dg.remove_node(6).unwrap();
+
+        let neighbors: Vec<(NodeId, ZHNode)> =
+            dg.neighbors(0).unwrap().map(|(nb, n)| (*nb, *n)).collect();
+        let neighbors_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                (2, ZHNode::Input),
+                (4, ZHNode::Input),
+                (1, ZHNode::Z(Phase::new(1, 3))),
+                (1, ZHNode::Z(Phase::new(1, 3))),
+            ];
+        assert_eq!(neighbors.len(), neighbors_expected.len());
+        assert!(
+            neighbors.into_iter()
+                .all(|x| neighbors_expected.contains(&x))
+        );
+
+        let z = dg.add_node(ZHNode::z_pi());
+        dg.add_wire(z, z).unwrap();
+        let neighbors: Vec<(NodeId, ZHNode)> =
+            dg.neighbors(z).unwrap().map(|(nb, n)| (*nb, *n)).collect();
+        let neighbors_expected: Vec<(NodeId, ZHNode)> =
+            vec![ (z, ZHNode::z_pi()) ];
+        assert_eq!(neighbors.len(), neighbors_expected.len());
+        assert!(
+            neighbors.into_iter()
+                .all(|x| neighbors_expected.contains(&x))
+        );
+    }
+
+    #[test]
+    fn iter_neighbors_inner() {
+        let mut dg = build_simple();
+
+        let neighbors_inner: Vec<(NodeId, ZHNode)> =
+            dg.neighbors_inner(0).unwrap().map(|(nb, n)| (*nb, *n)).collect();
+        let neighbors_inner_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                (1, ZHNode::Z(Phase::new(1, 3))),
+                (1, ZHNode::Z(Phase::new(1, 3))),
+                (8, ZHNode::H((-1.0).into())),
+            ];
+        assert_eq!(neighbors_inner.len(), neighbors_inner_expected.len());
+        assert!(
+            neighbors_inner.into_iter()
+                .all(|x| neighbors_inner_expected.contains(&x))
+        );
+
+        dg.remove_node(3).unwrap();
+        dg.remove_node(8).unwrap();
+        dg.remove_node(6).unwrap();
+
+        let neighbors_inner: Vec<(NodeId, ZHNode)> =
+            dg.neighbors_inner(0).unwrap().map(|(nb, n)| (*nb, *n)).collect();
+        let neighbors_inner_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                (1, ZHNode::Z(Phase::new(1, 3))),
+                (1, ZHNode::Z(Phase::new(1, 3))),
+            ];
+        assert_eq!(neighbors_inner.len(), neighbors_inner_expected.len());
+        assert!(
+            neighbors_inner.into_iter()
+                .all(|x| neighbors_inner_expected.contains(&x))
+        );
+    }
+
+    #[test]
+    fn adjoint() {
+        let mut dg = build_simple();
+        dg.adjoint_mut();
+
+        let nodes: Vec<(NodeId, ZHNode)> =
+            dg.nodes().map(|(id, n)| (id, *n)).collect();
+        let nodes_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                (0, ZHNode::Z(Phase::new(5, 6))),
+                (1, ZHNode::Z(Phase::new(2, 3))),
+                (2, ZHNode::Output),
+                (3, ZHNode::Output),
+                (4, ZHNode::Output),
+                (5, ZHNode::X(Phase::new(1, 8))),
+                (6, ZHNode::Input),
+                (7, ZHNode::Input),
+                (8, ZHNode::H((-1.0).into())),
+            ];
+        assert_eq!(nodes, nodes_expected);
+
+        let wires: Vec<(NodeId, NodeId)> =
+            dg.wires().map(|(l, r)| (l, *r)).collect();
+        let wires_expected: Vec<(NodeId, NodeId)> =
+            vec![
+                (0, 1),
+                (0, 1),
+                (0, 2),
+                (0, 3),
+                (0, 4),
+                (0, 6),
+                (0, 8),
+                (1, 7),
+                (5, 8),
+            ];
+        assert_eq!(wires.len(), wires_expected.len());
+        assert!(
+            wires.into_iter()
+                .all(|pair| {
+                    wires_expected.contains(&pair)
+                        || wires_expected.contains(&rev(pair))
+                })
+        );
+    }
+
+    #[test]
+    fn append() {
+        let mut dg = build_simple();
+        dg.append(build_simple());
+
+        let nodes: Vec<(NodeId, ZHNode)> =
+            dg.nodes().map(|(id, n)| (id, *n)).collect();
+        let nodes_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                ( 0, ZHNode::Z(Phase::new(1, 6))),
+                ( 1, ZHNode::Z(Phase::new(1, 3))),
+                ( 2, ZHNode::Input),
+                ( 3, ZHNode::Input),
+                ( 4, ZHNode::Input),
+                ( 5, ZHNode::X(Phase::new(7, 8))),
+                ( 6, ZHNode::Output),
+                ( 7, ZHNode::Output),
+                ( 8, ZHNode::H((-1.0).into())),
+                ( 9, ZHNode::Z(Phase::new(1, 6))),
+                (10, ZHNode::Z(Phase::new(1, 3))),
+                (11, ZHNode::Input),
+                (12, ZHNode::Input),
+                (13, ZHNode::Input),
+                (14, ZHNode::X(Phase::new(7, 8))),
+                (15, ZHNode::Output),
+                (16, ZHNode::Output),
+                (17, ZHNode::H((-1.0).into())),
+            ];
+        assert_eq!(nodes, nodes_expected);
+
+        let wires: Vec<(NodeId, NodeId)> =
+            dg.wires().map(|(l, r)| (l, *r)).collect();
+        let wires_expected: Vec<(NodeId, NodeId)> =
+            vec![
+                ( 0,  1),
+                ( 0,  1),
+                ( 0,  2),
+                ( 0,  3),
+                ( 0,  4),
+                ( 0,  6),
+                ( 0,  8),
+                ( 1,  7),
+                ( 5,  8),
+                ( 9, 10),
+                ( 9, 10),
+                ( 9, 11),
+                ( 9, 12),
+                ( 9, 13),
+                ( 9, 15),
+                ( 9, 17),
+                (10, 16),
+                (14, 17),
+            ];
+        assert_eq!(wires.len(), wires_expected.len());
+        assert!(
+            wires.into_iter()
+                .all(|pair| {
+                    wires_expected.contains(&pair)
+                        || wires_expected.contains(&rev(pair))
+                })
+        );
+    }
+
+    #[test]
+    fn tensor() {
+        let mut dg = build_simple();
+        dg.tensor_with(build_simple());
+
+        let nodes: Vec<(NodeId, ZHNode)> =
+            dg.nodes().map(|(id, n)| (id, *n)).collect();
+        let nodes_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                ( 0, ZHNode::Z(Phase::new(1, 6))),
+                ( 1, ZHNode::Z(Phase::new(1, 3))),
+                ( 2, ZHNode::Input),
+                ( 3, ZHNode::Input),
+                ( 4, ZHNode::Input),
+                ( 5, ZHNode::X(Phase::new(7, 8))),
+                ( 6, ZHNode::Output),
+                ( 7, ZHNode::Output),
+                ( 8, ZHNode::H((-1.0).into())),
+                ( 9, ZHNode::Z(Phase::new(1, 6))),
+                (10, ZHNode::Z(Phase::new(1, 3))),
+                (11, ZHNode::Input),
+                (12, ZHNode::Input),
+                (13, ZHNode::Input),
+                (14, ZHNode::X(Phase::new(7, 8))),
+                (15, ZHNode::Output),
+                (16, ZHNode::Output),
+                (17, ZHNode::H((-1.0).into())),
+            ];
+        assert_eq!(nodes, nodes_expected);
+
+        let wires: Vec<(NodeId, NodeId)> =
+            dg.wires().map(|(l, r)| (l, *r)).collect();
+        let wires_expected: Vec<(NodeId, NodeId)> =
+            vec![
+                ( 0,  1),
+                ( 0,  1),
+                ( 0,  2),
+                ( 0,  3),
+                ( 0,  4),
+                ( 0,  6),
+                ( 0,  8),
+                ( 1,  7),
+                ( 5,  8),
+                ( 9, 10),
+                ( 9, 10),
+                ( 9, 11),
+                ( 9, 12),
+                ( 9, 13),
+                ( 9, 15),
+                ( 9, 17),
+                (10, 16),
+                (14, 17),
+            ];
+        assert_eq!(wires.len(), wires_expected.len());
+        assert!(
+            wires.into_iter()
+                .all(|pair| {
+                    wires_expected.contains(&pair)
+                        || wires_expected.contains(&rev(pair))
+                })
+        );
+    }
+
+    #[test]
+    fn compose() {
+        let mut d0 = build_simple();
+        let mut dclone = d0.clone();
+        let d1 = build_simple();
+        assert!(dclone.compose_with(d1).is_err());
+        assert_eq!(d0.nodes, dclone.nodes);
+        assert_eq!(d0.node_count, dclone.node_count);
+        assert_eq!(d0.wires, dclone.wires);
+        assert_eq!(d0.wire_count, dclone.wire_count);
+        assert_eq!(d0.inputs, dclone.inputs);
+        assert_eq!(d0.outputs, dclone.outputs);
+        assert_eq!(d0.free, dclone.free);
+
+        let mut d1 = build_simple();
+        d1.add_output_wire(1).unwrap();
+        assert_eq!(d0.compose_with(d1).unwrap(), 9);
+
+        let nodes: Vec<(NodeId, ZHNode)> =
+            d0.nodes().map(|(id, n)| (id, *n)).collect();
+        let nodes_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                ( 0, ZHNode::Z(Phase::new(1, 6))),
+                ( 1, ZHNode::Z(Phase::new(1, 3))),
+                ( 5, ZHNode::X(Phase::new(7, 8))),
+                ( 6, ZHNode::Output),
+                ( 7, ZHNode::Output),
+                ( 8, ZHNode::H((-1.0).into())),
+                ( 9, ZHNode::Z(Phase::new(1, 6))),
+                (10, ZHNode::Z(Phase::new(1, 3))),
+                (11, ZHNode::Input),
+                (12, ZHNode::Input),
+                (13, ZHNode::Input),
+                (14, ZHNode::X(Phase::new(7, 8))),
+                (17, ZHNode::H((-1.0).into())),
+            ];
+        assert_eq!(nodes, nodes_expected);
+
+        let wires: Vec<(NodeId, NodeId)> =
+            d0.wires().map(|(l, r)| (l, *r)).collect();
+        let wires_expected: Vec<(NodeId, NodeId)> =
+            vec![
+                ( 0,  1),
+                ( 0,  1),
+                ( 0,  6),
+                ( 0,  8),
+                ( 0,  9),
+                ( 0, 10),
+                ( 0, 10),
+                ( 1,  7),
+                ( 5,  8),
+                ( 9, 10),
+                ( 9, 10),
+                ( 9, 11),
+                ( 9, 12),
+                ( 9, 13),
+                ( 9, 17),
+                (14, 17),
+            ];
+        assert_eq!(wires.len(), wires_expected.len());
+        assert!(
+            wires.into_iter()
+                .all(|pair| {
+                    wires_expected.contains(&pair)
+                        || wires_expected.contains(&rev(pair))
+                })
+        );
+    }
+
+    #[test]
+    fn compose_rev() {
+        let mut d0 = build_simple();
+        let mut dclone = d0.clone();
+        let d1 = build_simple();
+        assert!(dclone.compose_with_rev(d1).is_err());
+        assert_eq!(d0.nodes, dclone.nodes);
+        assert_eq!(d0.node_count, dclone.node_count);
+        assert_eq!(d0.wires, dclone.wires);
+        assert_eq!(d0.wire_count, dclone.wire_count);
+        assert_eq!(d0.inputs, dclone.inputs);
+        assert_eq!(d0.outputs, dclone.outputs);
+        assert_eq!(d0.free, dclone.free);
+
+        let d1 = build_simple();
+        d0.add_output_wire(1).unwrap();
+        assert_eq!(d0.compose_with_rev(d1).unwrap(), 10);
+
+        let nodes: Vec<(NodeId, ZHNode)> =
+            d0.nodes().map(|(id, n)| (id, *n)).collect();
+        let nodes_expected: Vec<(NodeId, ZHNode)> =
+            vec![
+                ( 0, ZHNode::Z(Phase::new(1, 6))),
+                ( 1, ZHNode::Z(Phase::new(1, 3))),
+                ( 2, ZHNode::Input),
+                ( 3, ZHNode::Input),
+                ( 4, ZHNode::Input),
+                ( 5, ZHNode::X(Phase::new(7, 8))),
+                ( 8, ZHNode::H((-1.0).into())),
+                (10, ZHNode::Z(Phase::new(1, 6))),
+                (11, ZHNode::Z(Phase::new(1, 3))),
+                (15, ZHNode::X(Phase::new(7, 8))),
+                (16, ZHNode::Output),
+                (17, ZHNode::Output),
+                (18, ZHNode::H((-1.0).into())),
+            ];
+        assert_eq!(nodes, nodes_expected);
+
+        let wires: Vec<(NodeId, NodeId)> =
+            d0.wires().map(|(l, r)| (l, *r)).collect();
+        let wires_expected: Vec<(NodeId, NodeId)> =
+            vec![
+                ( 0,  1),
+                ( 0,  1),
+                ( 0,  2),
+                ( 0,  3),
+                ( 0,  4),
+                ( 0,  8),
+                ( 0, 10),
+                ( 1, 10),
+                ( 1, 10),
+                ( 5,  8),
+                (10, 11),
+                (10, 11),
+                (10, 16),
+                (10, 18),
+                (11, 17),
+                (15, 18),
+            ];
+        println!("{:?}\n{:?}", wires, wires_expected);
+        assert_eq!(wires.len(), wires_expected.len());
+        assert!(
+            wires.into_iter()
+                .all(|pair| {
+                    wires_expected.contains(&pair)
+                        || wires_expected.contains(&rev(pair))
+                })
+        );
+    }
+
+    #[test]
+    fn macro_build() -> GraphResult<()> {
+        use std::collections::HashMap;
+        let (diagram, ids): (Diagram<ZH>, HashMap<&'static str, NodeId>) =
+            graph_diagram!(
+                <ZH>
+                nodes: {
+                    z0 = Z (Phase::new(1, 6)),
+                    z1 = Z (Phase::new(1, 3)),
+                    i0 = input (),
+                    i1 = input (),
+                    i2 = input (),
+                    x0 = X (Phase::new(7, 8)),
+                    o0 = output (),
+                    o1 = output (),
+                    h0 = h (),
+                }
+                +
+                add_wire: {
+                    i0 -- z0,
+                    i1 -- z0,
+                    i2 -- z0 -- o0,
+                    z1 -- o1,
+                    z0 -- z1 -- z0,
+                    z0 -- h0 -- x0,
+                }
+                +
+            )?;
+        assert_eq!(ids.len(), 9);
+        assert_eq!(ids["z0"], 0);
+        assert_eq!(ids["z1"], 1);
+        assert_eq!(ids["i0"], 2);
+        assert_eq!(ids["i1"], 3);
+        assert_eq!(ids["i2"], 4);
+        assert_eq!(ids["x0"], 5);
+        assert_eq!(ids["o0"], 6);
+        assert_eq!(ids["o1"], 7);
+        assert_eq!(ids["h0"], 8);
+
+        let nodes: Vec<(NodeId, ZHNode)> =
+            diagram.nodes().map(|(id, n)| (id, *n)).collect();
+        let wires: Vec<(NodeId, NodeId)> =
+            diagram.wires().map(|(l, r)| (l, *r)).collect();
+
+        let diagram_expected = build_simple();
+        let nodes_expected: Vec<(NodeId, ZHNode)> =
+            diagram_expected.nodes().map(|(id, n)| (id, *n)).collect();
+        let wires_expected: Vec<(NodeId, NodeId)> =
+            diagram_expected.wires().map(|(l, r)| (l, *r)).collect();
+
+        assert_eq!(nodes, nodes_expected);
+        assert_eq!(wires.len(), wires_expected.len());
+        assert!(
+            wires.into_iter()
+                .all(|(l, r)| {
+                    wires_expected.contains(&(l, r))
+                        || wires_expected.contains(&(r, l))
+                })
+        );
+
+        Ok(())
+    }
+
+}
