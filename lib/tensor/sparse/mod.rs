@@ -7,14 +7,20 @@ use thiserror::Error;
 use crate::{ c64_eq, phase::Phase };
 use super::ElementData;
 
+/// Errors for fallible operations on sparse tensors.
 #[derive(Debug, Error)]
 pub enum SpError {
+    /// Returned when an unmatched duplicate ket state is encountered in a dot
+    /// product.
     #[error("duplicate ket key in dot {0}")]
     DuplicateKetKey(usize),
 
+    /// Returned when an unmatched duplicate bra state is encountered in a dot
+    /// product.
     #[error("duplicate bra key in dot {0}")]
     DuplicateBraKey(usize),
 }
+/// Results with [`SpError`] errors.
 pub type SpResult<T> = Result<T, SpError>;
 
 pub(crate) mod state;

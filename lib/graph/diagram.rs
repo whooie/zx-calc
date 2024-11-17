@@ -131,6 +131,8 @@ pub trait ComplexRing:
     + std::ops::MulAssign<Self>
     + std::fmt::Debug
 {
+    const FRAC_1_SQRT_2: Self;
+
     /// Return the complex conjugate of `self`.
     fn conj(self) -> Self;
 
@@ -139,6 +141,9 @@ pub trait ComplexRing:
 }
 
 impl ComplexRing for C64 {
+    const FRAC_1_SQRT_2: Self =
+        Self { re: std::f64::consts::FRAC_1_SQRT_2, im: 0.0 };
+
     fn conj(self) -> Self { C64::conj(&self) }
 }
 
@@ -490,9 +495,9 @@ where A: DiagramData
     {
         let node =
             self.nodes.get_mut(id)
-            .ok_or(RemoveNodeMissingNode(id))?
+            .ok_or(MissingNode(id))?
             .take()
-            .ok_or(RemoveNodeMissingNode(id))?;
+            .ok_or(MissingNode(id))?;
         self.node_count -= 1;
         self.free.push(id);
         let nnb_of = self.wires[id].take().unwrap();
@@ -548,18 +553,32 @@ where A: DiagramData
     /// Fails if one or neither of the nodes exist.
     pub fn add_wire(&mut self, a: NodeId, b: NodeId) -> GraphResult<()> {
         self.get_node(a)
-            .ok_or(AddWireMissingNode(a))
+            .ok_or(MissingNode(a))
             .and_then(|node| {
-                (node.is_generator() || !self.is_connected(a).unwrap())
-                    .then_some(())
-                    .ok_or(AddWireConnectedIO(a))
+                (
+                    (
+                        node.is_generator()
+                        && self.get_input_index(a).is_none()
+                        && self.get_output_index(a).is_none()
+                    )
+                    || !self.is_connected(a).unwrap()
+                )
+                .then_some(())
+                .ok_or(ConnectedIO(a))
             })?;
         self.get_node(b)
-            .ok_or(AddWireMissingNode(b))
+            .ok_or(MissingNode(b))
             .and_then(|node| {
-                (node.is_generator() || !self.is_connected(b).unwrap())
-                    .then_some(())
-                    .ok_or(AddWireConnectedIO(b))
+                (
+                    (
+                        node.is_generator()
+                        && self.get_input_index(b).is_none()
+                        && self.get_output_index(b).is_none()
+                    )
+                    || !self.is_connected(b).unwrap()
+                )
+                .then_some(())
+                .ok_or(ConnectedIO(b))
             })?;
         self.wires[a].as_mut().unwrap().push(A::Wire::new_empty(b));
         self.wires[b].as_mut().unwrap().push(A::Wire::new_empty(a));
@@ -573,11 +592,11 @@ where A: DiagramData
     /// The pre-existing node cannot already by an input or output.
     pub fn add_input_wire(&mut self, id: NodeId) -> GraphResult<NodeId> {
         self.get_node(id)
-            .ok_or(AddWireMissingNode(id))
+            .ok_or(MissingNode(id))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(id).unwrap())
                     .then_some(())
-                    .ok_or(AddWireConnectedIO(id))
+                    .ok_or(ConnectedIO(id))
             })?;
         let input_id = self.add_node(A::Node::new_input());
         self.add_wire(id, input_id)?;
@@ -591,11 +610,11 @@ where A: DiagramData
     pub fn add_output_wire(&mut self, id: NodeId) -> GraphResult<NodeId>
     {
         self.get_node(id)
-            .ok_or(AddWireMissingNode(id))
+            .ok_or(MissingNode(id))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(id).unwrap())
                     .then_some(())
-                    .ok_or(AddWireConnectedIO(id))
+                    .ok_or(ConnectedIO(id))
             })?;
         let output_id = self.add_node(A::Node::new_output());
         self.add_wire(id, output_id)?;
@@ -610,8 +629,8 @@ where A: DiagramData
     pub fn remove_wires(&mut self, a: NodeId, b: NodeId, nwires: Option<usize>)
         -> GraphResult<usize>
     {
-        self.has_node(a).then_some(()).ok_or(RemoveWireMissingNode(a))?;
-        self.has_node(b).then_some(()).ok_or(RemoveWireMissingNode(b))?;
+        self.has_node(a).then_some(()).ok_or(MissingNode(a))?;
+        self.has_node(b).then_some(()).ok_or(MissingNode(b))?;
 
         let mut to_remove: Vec<usize> = Vec::new();
 
@@ -669,7 +688,8 @@ where A: DiagramData
 
     /// Return an iterator over all nodes, visited in index order.
     ///
-    /// The iterator item type is `(`[`NodeId`]`, &A::Node)`.
+    /// The iterator item type is `(`[`NodeId`]`,
+    /// &`[`A::Node`][DiagramData::Node]`)`.
     pub fn nodes(&self) -> Nodes<'_, A::Node> {
         Nodes { len: self.node_count, iter: self.nodes.iter().enumerate() }
     }
@@ -677,7 +697,8 @@ where A: DiagramData
     /// Return an iterator over all interior (non-input/output) nodes in the
     /// diagram, visited in index order.
     ///
-    /// The iterator item type is `(`[`NodeId`]`, &A::Node)`.
+    /// The iterator item type is `(`[`NodeId`]`,
+    /// &`[`A::Node`][DiagramData::Node]`)`.
     pub fn nodes_inner(&self) -> NodesInner<'_, A::Node> {
         NodesInner { iter: self.nodes.iter().enumerate() }
     }
@@ -708,7 +729,8 @@ where A: DiagramData
     /// arbitrary order. Each wire is only visited once and any data attached to
     /// the wire itself is stored in the right ID.
     ///
-    /// The iterator item type is `(`[`NodeId`]`, &A::Wire)`.
+    /// The iterator item type is `(`[`NodeId`]`,
+    /// &`[`A::Wire`][DiagramData::Wire]`)`.
     pub fn wires(&self) -> Wires<'_, A::Wire> {
         Wires {
             nb_group: None,
@@ -721,8 +743,9 @@ where A: DiagramData
     /// Return an iterator over all wires in the diagram, visited in mostly
     /// arbitrary order (see [`wires`][Self::wires]), with node data attached.
     ///
-    /// the iterator item type is `((`[`NodeId`], &A::Node), (&A::Wire,
-    /// &A::Node))`.
+    /// the iterator item type is `((`[`NodeId`]`,
+    /// &`[`A::Node`][DiagramData::Node]`), (&`[`A::Wire`][DiagramData::Wire]`,
+    /// &`[`A::Node`][DiagramData::Node]`))`.
     pub fn wires_data(&self) -> WiresData<'_, A, A::Node, A::Wire> {
         WiresData { dg: self, iter: self.wires() }
     }
@@ -731,7 +754,8 @@ where A: DiagramData
     /// (non-input/output) nodes in the diagram, visited in mostly arbitrary
     /// order (see [`wires`][Self::wires]).
     ///
-    /// The iterator item type is `(`[`NodeId`], &A::Wire)`.
+    /// The iterator item type is `(`[`NodeId`]`,
+    /// &`[`A::Wire`][DiagramData::Wire]`)`.
     pub fn wires_inner(&self) -> WiresInner<'_, A, A::Node, A::Wire> {
         WiresInner { dg: self, iter: self.wires() }
     }
@@ -740,8 +764,9 @@ where A: DiagramData
     /// (non-input/output) nodes in the diagram, visited in mostly arbitrary
     /// order (see [`wires`][Self::wires]), with node data attached.
     ///
-    /// The iterator item type is `((`[`NodeId`], &A::Node), (&A::Wire,
-    /// &A::Node))`.
+    /// The iterator item type is `((`[`NodeId`]`,
+    /// &`[`A::Node`][DiagramData::Node]`), (&`[`A::Wire`][DiagramData::Wire]`,
+    /// &`[`A::Node`][DiagramData::Node]`))`.
     pub fn wires_data_inner(&self) -> WiresDataInner<'_, A, A::Node, A::Wire> {
         WiresDataInner { iter: self.wires_data() }
     }
@@ -805,7 +830,8 @@ where A: DiagramData
     /// multiple wires going to the same neighbor; if the node is connected to
     /// itself, each such connection will be counted only once.
     ///
-    /// The iterator item type is `(&A::Wire, &A::Node)`.
+    /// The iterator item type is `(&`[`A::Wire`][DiagramData::Wire]`,
+    /// &`[`A::Node`][DiagramData::Node]`)`.
     pub fn neighbors(&self, id: NodeId)
         -> Option<Neighbors<'_, A, A::Node, A::Wire>>
     {
@@ -850,7 +876,8 @@ where A: DiagramData
     /// multiple wires going to the same neighbor; if the node is connected to
     /// itself, each such connection will be counted only once.
     ///
-    /// The iterator type is `(&A::Wire, &A::Node)`.
+    /// The iterator type is `(&`[`A::Wire`][DiagramData::Wire]`,
+    /// &`[`A::Node`][DiagramData::Node]`)`.
     pub fn neighbors_inner(&self, id: NodeId)
         -> Option<NeighborsInner<'_, A, A::Node, A::Wire>>
     {
@@ -879,7 +906,8 @@ where A: DiagramData
             .and_then(|mut nnb| nnb.find_map(|(id, n)| pred(id, n)))
     }
 
-    /// Replace two existing diagram inputs or outputs with a Bell state/effect.
+    /// Replace two existing diagram inputs or outputs with a Bell state/effect
+    /// and multiply by a scalar factor 1/√2.
     ///
     /// The inputs or outputs will be replaced with phaseless spiders (for
     /// book-keeping purposes) with the same IDs.
@@ -887,14 +915,14 @@ where A: DiagramData
     /// Fails if the given node IDs do not exist, are not both inputs or
     /// outputs, or refer to the same qubit.
     pub fn apply_bell(&mut self, a: NodeId, b: NodeId) -> GraphResult<()> {
-        if a == b { return Err(ApplyBellSameQubit); }
+        if a == b { return Err(SameQubit); }
         self.get_node(a).zip(self.get_node(b))
             .is_some_and(|(na, nb)| {
                 (na.is_input() && nb.is_input())
                     || (na.is_output() && nb.is_output())
             })
             .then_some(())
-            .ok_or(ApplyBellNotIO(a, b))?;
+            .ok_or(BellNotIO(a, b))?;
         if self.nodes[a].as_ref().unwrap().is_input() {
             self.inputs.iter_mut()
                 .find(|ioid| ioid.has_id(a))
@@ -919,7 +947,12 @@ where A: DiagramData
                 .make_state();
         }
         self.nodes[b] = Some(A::Node::new_id());
-        self.add_wire(a, b)?;
+        // add the wire manually because `add_wire` normally guards against more
+        // than one wire to an input/output node
+        self.wires[a].as_mut().unwrap().push(A::Wire::new_empty(b));
+        self.wires[b].as_mut().unwrap().push(A::Wire::new_empty(a));
+        self.wire_count += 1;
+        self.scalar *= A::Scalar::FRAC_1_SQRT_2;
         Ok(())
     }
 
@@ -929,10 +962,10 @@ where A: DiagramData
         -> GraphResult<()>
     {
         self.get_input_id(qa)
-            .ok_or(ApplyBellMissingQubit(qa))
+            .ok_or(MissingQubit(qa))
             .and_then(|nida| {
                 self.get_input_id(qb)
-                    .ok_or(ApplyBellMissingQubit(qb))
+                    .ok_or(MissingQubit(qb))
                     .map(|nidb| (nida, nidb))
             })
             .and_then(|(nida, nidb)| self.apply_bell(nida.id(), nidb.id()))
@@ -944,10 +977,10 @@ where A: DiagramData
         -> GraphResult<()>
     {
         self.get_output_id(qa)
-            .ok_or(ApplyBellMissingQubit(qa))
+            .ok_or(MissingQubit(qa))
             .and_then(|nida| {
                 self.get_output_id(qb)
-                    .ok_or(ApplyBellMissingQubit(qb))
+                    .ok_or(MissingQubit(qb))
                     .map(|nidb| (nida, nidb))
             })
             .and_then(|(nida, nidb)| self.apply_bell(nida.id(), nidb.id()))
@@ -1079,7 +1112,7 @@ where A: DiagramData
             })
             .collect();
         (self_inputs.len() == rhs_outputs.len()).then_some(())
-            .ok_or(NonMatchingIO(rhs_outputs.len(), self_inputs.len()))?;
+            .ok_or(ComposeIO(rhs_outputs.len(), self_inputs.len()))?;
         let shift = self.append(rhs);
         let iter = rhs_outputs.into_iter().zip(self_inputs);
         for ((out_id, mb_out_int), (in_id, mb_in_int)) in iter {
@@ -1182,7 +1215,7 @@ where A: DiagramData
             })
             .collect();
         (self_outputs.len() == rhs_inputs.len()).then_some(())
-            .ok_or(NonMatchingIO(self_outputs.len(), rhs_inputs.len()))?;
+            .ok_or(ComposeIO(self_outputs.len(), rhs_inputs.len()))?;
         let shift = self.append(rhs);
         let it = self_outputs.into_iter().zip(rhs_inputs);
         for ((out_id, mb_out_int), (in_id, mb_in_int)) in it {
@@ -1837,8 +1870,8 @@ where
 /// The first item (in angle brackets) sets the variant of the ZX-calculus in
 /// use, and should be the name of a type implementing [`DiagramData`].
 /// Following that, there are three distinct kinds of blocks, separated by a
-/// single `+`. The first of these is headed with `nodes` and defines nodes in
-/// the diagram with the syntax
+/// single `+`. The first of these is anonymous and defines nodes in the diagram
+/// with the syntax
 /// ```text
 /// <node_label> = <node_constructor> ( args... )
 /// ```
@@ -1920,7 +1953,7 @@ where
 ///
 /// graph_diagram!(
 ///     <ZX>
-///     nodes: {
+///     {
 ///         i0 = input ( ),
 ///         i1 = input ( ),
 ///         i2 = input ( ),
@@ -1950,7 +1983,7 @@ where
 macro_rules! graph_diagram {
     (
         <$variant:ty>
-        nodes : {
+        {
             $( $node_name:ident = $node:ident ( $( $arg:expr ),* $(,)? ) ),*
             $(,)?
         }
@@ -2973,7 +3006,7 @@ mod tests {
         let (diagram, ids): (Diagram<ZH>, HashMap<&'static str, NodeId>) =
             graph_diagram!(
                 <ZH>
-                nodes: {
+                {
                     z0 = Z (Phase::new(1, 6)),
                     z1 = Z (Phase::new(1, 3)),
                     i0 = input (),

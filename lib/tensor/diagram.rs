@@ -371,7 +371,7 @@ where A: ElementData
                     }
                     for out_wire in elem.output_iter() {
                         if wires.insert(out_wire, node_id).is_some() {
-                            return Err(DuplicateWireIndex(out_wire));
+                            return Err(DuplicateWire(out_wire));
                         }
                     }
                 },
@@ -382,10 +382,10 @@ where A: ElementData
                     let n = graph.add_node(graph::ZHNode::z());
                     to_remove.push(n);
                     if wires.insert(a, n).is_some() {
-                        return Err(DuplicateWireIndex(a));
+                        return Err(DuplicateWire(a));
                     }
                     if wires.insert(b, n).is_some() {
-                        return Err(DuplicateWireIndex(b));
+                        return Err(DuplicateWire(b));
                     }
                 },
                 Kind::Cap(a, b) => {
@@ -394,7 +394,7 @@ where A: ElementData
                     graph.add_wire(n1, n2).unwrap();
                 },
                 Kind::Unknown => {
-                    return Err(GraphConvNonGenerator);
+                    return Err(NonGenerator);
                 },
             }
         }
@@ -581,7 +581,7 @@ where A: ElementData
                     }
                     for out_wire in elem.output_iter() {
                         if wires.insert(out_wire, node_id).is_some() {
-                            return Err(DuplicateWireIndex(out_wire));
+                            return Err(DuplicateWire(out_wire));
                         }
                     }
                 },
@@ -823,7 +823,8 @@ fn subscript_str(n: usize) -> String {
 /// use zx_calc::tensor_diagram;
 ///
 /// tensor_diagram!(
-///     <De> {
+///     <De>
+///     {
 ///         cup (1, 2),
 ///         z_0 ([0], [0, 3]),
 ///         x_0 ([1, 3], [1]),
@@ -838,7 +839,8 @@ fn subscript_str(n: usize) -> String {
 #[macro_export]
 macro_rules! tensor_diagram {
     (
-        <$storage:ty> {
+        <$storage:ty>
+        {
             $( $element_type:ident ( $( $arg:expr ),* $(,)? ) ),* $(,)?
         } $(,)?
     ) => {

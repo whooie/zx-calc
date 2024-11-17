@@ -184,9 +184,9 @@ impl Diagram<CT> {
     ) -> GraphResult<usize>
     {
         self.has_node(a).then_some(())
-            .ok_or(RemoveWireMissingNode(a))?;
+            .ok_or(MissingNode(a))?;
         self.has_node(b).then_some(())
-            .ok_or(RemoveWireMissingNode(b))?;
+            .ok_or(MissingNode(b))?;
 
         let mut to_remove: Vec<usize> = Vec::new();
 
@@ -230,9 +230,9 @@ impl Diagram<CT> {
     ) -> GraphResult<usize>
     {
         self.has_node(a).then_some(())
-            .ok_or(RemoveWireMissingNode(a))?;
+            .ok_or(MissingNode(a))?;
         self.has_node(b).then_some(())
-            .ok_or(RemoveWireMissingNode(b))?;
+            .ok_or(MissingNode(b))?;
 
         let mut to_remove: Vec<usize> = Vec::new();
 
@@ -275,9 +275,9 @@ impl Diagram<CT> {
     ) -> GraphResult<usize>
     {
         self.has_node(a).then_some(())
-            .ok_or(RemoveWireMissingNode(a))?;
+            .ok_or(MissingNode(a))?;
         self.has_node(b).then_some(())
-            .ok_or(RemoveWireMissingNode(b))?;
+            .ok_or(MissingNode(b))?;
 
         let mut to_remove: Vec<usize> = Vec::new();
 
@@ -312,18 +312,32 @@ impl Diagram<CT> {
     /// Fails if one or neither of the nodes exist.
     pub fn add_wire_h(&mut self, a: NodeId, b: NodeId) -> GraphResult<()> {
         self.get_node(a)
-            .ok_or(AddWireMissingNode(a))
+            .ok_or(MissingNode(a))
             .and_then(|node| {
-                (node.is_generator() || !self.is_connected(a).unwrap())
-                    .then_some(())
-                    .ok_or(AddWireConnectedIO(a))
+                (
+                    (
+                        node.is_generator()
+                        && self.get_input_index(a).is_none()
+                        && self.get_output_index(a).is_none()
+                    )
+                    || !self.is_connected(a).unwrap()
+                )
+                .then_some(())
+                .ok_or(ConnectedIO(a))
             })?;
         self.get_node(b)
-            .ok_or(AddWireMissingNode(b))
+            .ok_or(MissingNode(b))
             .and_then(|node| {
-                (node.is_generator() || !self.is_connected(b).unwrap())
-                    .then_some(())
-                    .ok_or(AddWireConnectedIO(b))
+                (
+                    (
+                        node.is_generator()
+                        && self.get_input_index(b).is_none()
+                        && self.get_output_index(b).is_none()
+                    )
+                    || !self.is_connected(b).unwrap()
+                )
+                .then_some(())
+                .ok_or(ConnectedIO(b))
             })?;
         self.wires[a].as_mut().unwrap().push(CTWire::H(b));
         self.wires[b].as_mut().unwrap().push(CTWire::H(a));
@@ -336,18 +350,32 @@ impl Diagram<CT> {
     /// Fails if one or neither of the nodes exist.
     pub fn add_wire_s(&mut self, a: NodeId, b: NodeId) -> GraphResult<()> {
         self.get_node(a)
-            .ok_or(AddWireMissingNode(a))
+            .ok_or(MissingNode(a))
             .and_then(|node| {
-                (node.is_generator() || !self.is_connected(a).unwrap())
-                    .then_some(())
-                    .ok_or(AddWireConnectedIO(a))
+                (
+                    (
+                        node.is_generator()
+                        && self.get_input_index(a).is_none()
+                        && self.get_output_index(a).is_none()
+                    )
+                    || !self.is_connected(a).unwrap()
+                )
+                .then_some(())
+                .ok_or(ConnectedIO(a))
             })?;
         self.get_node(b)
-            .ok_or(AddWireMissingNode(b))
+            .ok_or(MissingNode(b))
             .and_then(|node| {
-                (node.is_generator() || !self.is_connected(b).unwrap())
-                    .then_some(())
-                    .ok_or(AddWireConnectedIO(b))
+                (
+                    (
+                        node.is_generator()
+                        && self.get_input_index(b).is_none()
+                        && self.get_output_index(b).is_none()
+                    )
+                    || !self.is_connected(b).unwrap()
+                )
+                .then_some(())
+                .ok_or(ConnectedIO(b))
             })?;
         self.wires[a].as_mut().unwrap().push(CTWire::S(b));
         self.wires[b].as_mut().unwrap().push(CTWire::S(a));
@@ -363,11 +391,11 @@ impl Diagram<CT> {
         -> GraphResult<NodeId>
     {
         self.get_node(id)
-            .ok_or(AddWireMissingNode(id))
+            .ok_or(MissingNode(id))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(id).unwrap())
                     .then_some(())
-                    .ok_or(AddWireConnectedIO(id))
+                    .ok_or(ConnectedIO(id))
             })?;
         let input_id = self.add_node(CTNode::Z(phase));
         self.add_wire(id, input_id)?;
@@ -383,11 +411,11 @@ impl Diagram<CT> {
         -> GraphResult<NodeId>
     {
         self.get_node(id)
-            .ok_or(AddWireMissingNode(id))
+            .ok_or(MissingNode(id))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(id).unwrap())
                     .then_some(())
-                    .ok_or(AddWireConnectedIO(id))
+                    .ok_or(ConnectedIO(id))
             })?;
         let input_id = self.add_node(CTNode::Z(phase));
         self.add_wire_h(id, input_id)?;
@@ -403,11 +431,11 @@ impl Diagram<CT> {
         -> GraphResult<NodeId>
     {
         self.get_node(id)
-            .ok_or(AddWireMissingNode(id))
+            .ok_or(MissingNode(id))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(id).unwrap())
                     .then_some(())
-                    .ok_or(AddWireConnectedIO(id))
+                    .ok_or(ConnectedIO(id))
             })?;
         let output_id = self.add_node(CTNode::Z(phase));
         self.add_wire(id, output_id)?;
@@ -423,11 +451,11 @@ impl Diagram<CT> {
         -> GraphResult<NodeId>
     {
         self.get_node(id)
-            .ok_or(AddWireMissingNode(id))
+            .ok_or(MissingNode(id))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(id).unwrap())
                     .then_some(())
-                    .ok_or(AddWireConnectedIO(id))
+                    .ok_or(ConnectedIO(id))
             })?;
         let output_id = self.add_node(CTNode::Z(phase));
         self.add_wire_h(id, output_id)?;
@@ -435,7 +463,29 @@ impl Diagram<CT> {
         Ok(output_id)
     }
 
-    /// Replace an existing diagram input or output with a spider of arity 1.
+    pub(crate) fn toggle_io_h(&mut self, io_id: NodeId) {
+        let mb_int = self.wires[io_id].as_ref().unwrap().first().copied();
+        if let Some(int_wire) = mb_int {
+            if int_wire.is_s() {
+                self.remove_wires_s(io_id, int_wire.id(), None).unwrap();
+                let new = self.add_node(CTNode::z0());
+                self.add_wire_s(new, int_wire.id()).unwrap();
+                self.add_wire_h(io_id, new).unwrap();
+            } else {
+                self.wires[io_id].as_mut().unwrap()
+                    .first_mut().unwrap()
+                    .toggle_h();
+                let int = int_wire.id();
+                self.wires[int].as_mut().unwrap()
+                    .iter_mut()
+                    .find(|wire| wire.has_id(io_id)).unwrap()
+                    .toggle_h();
+            }
+        }
+    }
+
+    /// Replace an existing diagram input or output with a spider of arity 1 and
+    /// multiply by a scalar 1/√2.
     ///
     /// The new spider will have the same node ID as the input or output.
     ///
@@ -443,33 +493,34 @@ impl Diagram<CT> {
     pub fn apply_state_z(&mut self, id: NodeId, phase: TPhase)
         -> GraphResult<()>
     {
+        if !self.is_connected(id).ok_or(NotIO(id))? {
+            return Err(DisconnectedIO);
+        }
         if let Some(n) = self.get_node(id) {
             if n.is_input() {
                 self.inputs.iter_mut()
                     .find(|ioid| ioid.has_id(id))
                     .unwrap()
                     .make_state();
-                let prev = self.get_node_mut(id).unwrap();
-                *prev = CTNode::Z(phase);
-                Ok(())
             } else if n.is_output() {
                 self.outputs.iter_mut()
                     .find(|ioid| ioid.has_id(id))
                     .unwrap()
                     .make_state();
-                let prev = self.get_node_mut(id).unwrap();
-                *prev = CTNode::Z(phase);
-                Ok(())
             } else {
-                Err(ApplyStateNotIO(id))
+                return Err(NotIO(id));
             }
+            let prev = self.get_node_mut(id).unwrap();
+            *prev = CTNode::Z(phase);
+            self.scalar *= Complex::FRAC_1_SQRT_2;
+            Ok(())
         } else {
-            Err(ApplyStateNotIO(id))
+            Err(NotIO(id))
         }
     }
 
     /// Replace an existing diagram input or output with a spider of arity 1 on
-    /// a Hadamard wire.
+    /// a Hadamard wire and multiply by a scalar 1/√2.
     ///
     /// The new spider will have the same node ID as the input or output.
     ///
@@ -477,42 +528,9 @@ impl Diagram<CT> {
     pub fn apply_state_x(&mut self, id: NodeId, phase: TPhase)
         -> GraphResult<()>
     {
-        if let Some(n) = self.get_node(id) {
-            if n.is_input() {
-                self.inputs.iter_mut()
-                    .find(|ioid| ioid.has_id(id))
-                    .unwrap()
-                    .make_state();
-                let prev = self.get_node_mut(id).unwrap();
-                *prev = CTNode::Z(phase);
-                let mb_int = self.wires[id].as_ref().unwrap().first().copied();
-                if let Some(int_wire) = mb_int {
-                    if int_wire.is_s() {
-                        self.remove_wires_s(id, int_wire.id(), None).unwrap();
-                        let new = self.add_node(CTNode::z0());
-                        self.add_wire_s(new, int_wire.id()).unwrap();
-                        self.add_wire_h(id, new).unwrap();
-                    } else {
-                        self.wires[id].as_mut().unwrap()
-                            .first_mut().unwrap()
-                            .toggle_h();
-                    }
-                }
-                Ok(())
-            } else if n.is_output() {
-                self.outputs.iter_mut()
-                    .find(|ioid| ioid.has_id(id))
-                    .unwrap()
-                    .make_state();
-                let prev = self.get_node_mut(id).unwrap();
-                *prev = CTNode::Z(phase);
-                Ok(())
-            } else {
-                Err(ApplyStateNotIO(id))
-            }
-        } else {
-            Err(ApplyStateNotIO(id))
-        }
+        self.apply_state_z(id, phase)?;
+        self.toggle_io_h(id);
+        Ok(())
     }
 
     /// Like [`apply_state_z`][Self::apply_state], but using input qubit indices
@@ -521,7 +539,7 @@ impl Diagram<CT> {
         -> GraphResult<()>
     {
         self.get_input_id(q)
-            .ok_or(ApplyStateMissingQubit(q))
+            .ok_or(MissingQubit(q))
             .and_then(|nid| self.apply_state_z(nid.id(), phase))
     }
 
@@ -531,7 +549,7 @@ impl Diagram<CT> {
         -> GraphResult<()>
     {
         self.get_input_id(q)
-            .ok_or(ApplyStateMissingQubit(q))
+            .ok_or(MissingQubit(q))
             .and_then(|nid| self.apply_state_x(nid.id(), phase))
     }
 
@@ -541,7 +559,7 @@ impl Diagram<CT> {
         -> GraphResult<()>
     {
         self.get_output_id(q)
-            .ok_or(ApplyStateMissingQubit(q))
+            .ok_or(MissingQubit(q))
             .and_then(|nid| self.apply_state_z(nid.id(), phase))
     }
 
@@ -551,8 +569,157 @@ impl Diagram<CT> {
         -> GraphResult<()>
     {
         self.get_output_id(q)
-            .ok_or(ApplyStateMissingQubit(q))
+            .ok_or(MissingQubit(q))
             .and_then(|nid| self.apply_state_x(nid.id(), phase))
+    }
+
+    /// Replace an existing diagram input or output state with an `Input` or
+    /// `Output` node and multiplying by a scalar √2. The previous state node is
+    /// returned.
+    ///
+    /// The new `Input` or `Output` will have the same node ID as the previous
+    /// spider.
+    ///
+    /// Fails if the given node ID does not exist or is not an input or output
+    /// state.
+    pub fn remove_z_state(&mut self, id: NodeId) -> GraphResult<CTNode> {
+        use std::mem::replace;
+        let prev =
+            if let Some(ioid) =
+                self.inputs.iter_mut()
+                .find(|ioid| ioid.is_state_and(|nid| nid == id))
+            {
+                ioid.make_free();
+                replace(self.get_node_mut(id).unwrap(), CTNode::Input)
+            } else if let Some(ioid) =
+                self.outputs.iter_mut()
+                .find(|ioid| ioid.is_state_and(|nid| nid == id))
+            {
+                ioid.make_free();
+                replace(self.get_node_mut(id).unwrap(), CTNode::Output)
+            } else {
+                return Err(NotIOState(id));
+            };
+        // the state node could be part of a Bell pair -- note that states are
+        // guaranteed not part of multiple Bell pairs
+        if self.arity(id).unwrap() == 2 {
+            let bell_other =
+                self.inputs.iter()
+                .find(|ioid| {
+                    ioid.is_state_and(|nid| {
+                        self.mutual_arity(id, nid).unwrap() > 0
+                    })
+                })
+                .unwrap()
+                .id();
+            self.remove_wires(id, bell_other, None).unwrap();
+        }
+        self.scalar *= Complex::SQRT_2;
+        Ok(prev)
+    }
+
+    /// Replace an existing diagram input or output state with an `Input` or
+    /// `Output` node and multiplying by a scalar √2. The previous state node is
+    /// treated as an X-spider (i.e. the wire it's connected to will have its
+    /// Hadamard-ness flipped) and is returned.
+    ///
+    /// The new `Input` or `Output` will have the same node ID as the previous
+    /// spider.
+    ///
+    /// Fails if the given node ID does not exist or is not an input or output
+    /// state.
+    pub fn remove_x_state(&mut self, id: NodeId) -> GraphResult<CTNode> {
+        let state = self.remove_z_state(id)?;
+        self.toggle_io_h(id);
+        Ok(state)
+    }
+
+    /// Like [`remove_z_state`][Self::remove_z_state], but using input qubit
+    /// indices rather than bare node IDs.
+    pub fn remove_z_state_input(&mut self, q: QubitId) -> GraphResult<CTNode> {
+        use std::mem::replace;
+        if let Some(ioid) = self.inputs.get_mut(q) {
+            if ioid.is_state() {
+                ioid.make_free();
+                let id = ioid.id();
+                let prev =
+                    replace(self.get_node_mut(id).unwrap(), CTNode::Input);
+                // the state node could be part of a Bell pair -- note that
+                // states are guaranteed not part of multiple Bell pairs
+                let arity = self.arity(id).unwrap();
+                if arity == 2 {
+                    let bell_other =
+                        self.inputs.iter()
+                        .find(|ioid| {
+                            ioid.is_state_and(|nid| {
+                                self.mutual_arity(id, nid).unwrap() > 0
+                            })
+                        })
+                        .unwrap()
+                        .id();
+                    self.remove_wires(id, bell_other, None).unwrap();
+                }
+                self.scalar *= Complex::SQRT_2;
+                Ok(prev)
+            } else {
+                Err(NotIOState(ioid.id()))
+            }
+        } else {
+            Err(MissingQubit(q))
+        }
+    }
+
+    /// Like [`remove_x_state`][Self::remove_x_state], but using input qubit
+    /// indices rather than bare node IDs.
+    pub fn remove_x_state_input(&mut self, q: QubitId) -> GraphResult<CTNode> {
+        let state = self.remove_z_state_input(q)?;
+        let id = self.get_input_id(q).unwrap().id();
+        self.toggle_io_h(id);
+        Ok(state)
+    }
+
+    /// Like [`remove_z_state`][Self::remove_z_state], but using output qubit
+    /// indices rather than bare node IDs.
+    pub fn remove_z_state_output(&mut self, q: QubitId) -> GraphResult<CTNode> {
+        use std::mem::replace;
+        if let Some(ioid) = self.outputs.get_mut(q) {
+            if ioid.is_state() {
+                ioid.make_free();
+                let id = ioid.id();
+                let prev =
+                    replace(self.get_node_mut(id).unwrap(), CTNode::Output);
+                // the state node could be part of a Bell pair -- note that
+                // states are guaranteed not part of multiple Bell pairs
+                let arity = self.arity(id).unwrap();
+                if arity == 2 {
+                    let bell_other =
+                        self.outputs.iter()
+                        .find(|ioid| {
+                            ioid.is_state_and(|nid| {
+                                self.mutual_arity(id, nid).unwrap() > 0
+                            })
+                        })
+                        .unwrap()
+                        .id();
+                    self.remove_wires(id, bell_other, None).unwrap();
+                }
+                self.scalar *= Complex::SQRT_2;
+                Ok(prev)
+            } else {
+                Err(NotIOState(ioid.id()))
+            }
+        } else {
+            Err(MissingQubit(q))
+        }
+    }
+
+    /// Like [`remove_x_state`][Self::remove_x_state], but using output qubit
+    /// indices rather than bare node IDs.
+    pub fn remove_x_state_output(&mut self, q: QubitId) -> GraphResult<CTNode> {
+        let state = self.remove_z_state_output(q)?;
+        let id = self.get_output_id(q).unwrap().id();
+        self.toggle_io_h(id);
+        Ok(state)
     }
 
     /// Return an object containing an encoding of `self` in the [DOT

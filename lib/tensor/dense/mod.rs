@@ -6,17 +6,26 @@ use thiserror::Error;
 use crate::{ c64_eq, phase::Phase };
 use super::ElementData;
 
+/// Errors for fallible operations on dense tensors.
 #[derive(Debug, Error)]
 pub enum DeError {
-    #[error("duplicate index {0:?}")]
+    /// Returned when attempting to create a new tensor and a duplicate index is
+    /// encountered.
+    #[error("unmatched duplicate index {0:?}")]
     DuplicateIndex(Q),
 
+    /// Returned when attempting to create a new tensor from a pre-existing
+    /// array whose shape does not match that implied by the accompanying
+    /// indices.
     #[error("non-matching indices {0:?} and shape {1:?}")]
     IncompatibleShape(Box<[Q]>, Box<[usize]>),
 
-    #[error("un-matched duplicate index in contraction {0:?}")]
+    /// Returned when an unmatched duplicate index is encountered in a tensor
+    /// contraction product.
+    #[error("unmatched duplicate index in contraction {0:?}")]
     ContractDuplicateIndex(Q),
 }
+/// Results with [`DeError`] errors.
 pub type DeResult<T> = Result<T, DeError>;
 
 pub(crate) mod tensor;

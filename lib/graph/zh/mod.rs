@@ -106,11 +106,11 @@ impl Diagram<ZH> {
         -> GraphResult<NodeId>
     {
         self.get_node(id)
-            .ok_or(AddWireMissingNode(id))
+            .ok_or(MissingNode(id))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(id).unwrap())
                     .then_some(())
-                    .ok_or(AddWireConnectedIO(id))
+                    .ok_or(ConnectedIO(id))
             })?;
         let input_id = self.add_node(state.into());
         self.add_wire(id, input_id)?;
@@ -126,11 +126,11 @@ impl Diagram<ZH> {
         -> GraphResult<NodeId>
     {
         self.get_node(id)
-            .ok_or(AddWireMissingNode(id))
+            .ok_or(MissingNode(id))
             .and_then(|node| {
                 (node.is_generator() || !self.is_connected(id).unwrap())
                     .then_some(())
-                    .ok_or(AddWireConnectedIO(id))
+                    .ok_or(ConnectedIO(id))
             })?;
         let output_id = self.add_node(effect.into());
         self.add_wire(id, output_id)?;
@@ -138,7 +138,8 @@ impl Diagram<ZH> {
         Ok(output_id)
     }
 
-    /// Replace an existing diagram input or output with a spider of arity 1.
+    /// Replace an existing diagram input or output with a spider of arity 1 and
+    /// multiply by a scalar 1/√2.
     ///
     /// The new spider will have the same node ID as the input or output.
     ///
@@ -146,28 +147,29 @@ impl Diagram<ZH> {
     pub fn apply_state(&mut self, id: NodeId, spider: Spider)
         -> GraphResult<()>
     {
+        if !self.is_connected(id).ok_or(NotIO(id))? {
+            return Err(DisconnectedIO);
+        }
         if let Some(n) = self.get_node(id) {
             if n.is_input() {
                 self.inputs.iter_mut()
                     .find(|ioid| ioid.has_id(id))
                     .unwrap()
                     .make_state();
-                let prev = self.get_node_mut(id).unwrap();
-                *prev = spider.into();
-                Ok(())
             } else if n.is_output() {
                 self.outputs.iter_mut()
                     .find(|ioid| ioid.has_id(id))
                     .unwrap()
                     .make_state();
-                let prev = self.get_node_mut(id).unwrap();
-                *prev = spider.into();
-                Ok(())
             } else {
-                Err(ApplyStateNotIO(id))
+                return Err(NotIO(id));
             }
+            let prev = self.get_node_mut(id).unwrap();
+            *prev = spider.into();
+            self.scalar *= std::f64::consts::FRAC_1_SQRT_2;
+            Ok(())
         } else {
-            Err(ApplyStateNotIO(id))
+            Err(NotIO(id))
         }
     }
 
@@ -177,7 +179,7 @@ impl Diagram<ZH> {
         -> GraphResult<()>
     {
         self.get_input_id(q)
-            .ok_or(ApplyStateMissingQubit(q))
+            .ok_or(MissingQubit(q))
             .and_then(|nid| self.apply_state(nid.id(), spider))
     }
 
@@ -187,8 +189,124 @@ impl Diagram<ZH> {
         -> GraphResult<()>
     {
         self.get_output_id(q)
-            .ok_or(ApplyStateMissingQubit(q))
+            .ok_or(MissingQubit(q))
             .and_then(|nid| self.apply_state(nid.id(), spider))
+    }
+
+    /// Replace an existing diagram input or output state with an empty wire,
+    /// converting it back to an `Input` or `Output` node and multiplying by a
+    /// scalar √2 if the state is not part of a Bell pair. The previous state
+    /// node is returned.
+    ///
+    /// The new `Input` or `Output` will have the same node ID as the previous
+    /// spider.
+    ///
+    /// Fails if the given node ID does not exist or is not an input or output
+    /// state.
+    pub fn remove_state(&mut self, id: NodeId) -> GraphResult<ZHNode> {
+        use std::mem::replace;
+        let prev =
+            if let Some(ioid) =
+                self.inputs.iter_mut()
+                .find(|ioid| ioid.is_state_and(|nid| nid == id))
+            {
+                ioid.make_free();
+                replace(self.get_node_mut(id).unwrap(), ZHNode::Input)
+            } else if let Some(ioid) =
+                self.outputs.iter_mut()
+                .find(|ioid| ioid.is_state_and(|nid| nid == id))
+            {
+                ioid.make_free();
+                replace(self.get_node_mut(id).unwrap(), ZHNode::Output)
+            } else {
+                return Err(NotIOState(id));
+            };
+        // the state node could be part of a Bell pair -- note that states are
+        // guaranteed not part of multiple Bell pairs
+        if self.arity(id).unwrap() == 2 {
+            let bell_other =
+                self.inputs.iter()
+                .find(|ioid| {
+                    ioid.is_state_and(|nid| {
+                        self.mutual_arity(id, nid).unwrap() > 0
+                    })
+                })
+                .unwrap()
+                .id();
+            self.remove_wires(id, bell_other, None).unwrap();
+        }
+        self.scalar *= std::f64::consts::SQRT_2;
+        Ok(prev)
+    }
+
+    /// Like [`remove_state`][Self::remove_state], but using input qubit indices
+    /// rather than bare node IDs.
+    pub fn remove_state_input(&mut self, q: QubitId) -> GraphResult<ZHNode> {
+        use std::mem::replace;
+        if let Some(ioid) = self.inputs.get_mut(q) {
+            if ioid.is_state() {
+                ioid.make_free();
+                let id = ioid.id();
+                let prev =
+                    replace(self.get_node_mut(id).unwrap(), ZHNode::Input);
+                // the state node could be part of a Bell pair -- note that
+                // states are guaranteed not part of multiple Bell pairs
+                let arity = self.arity(id).unwrap();
+                if arity == 2 {
+                    let bell_other =
+                        self.inputs.iter()
+                        .find(|ioid| {
+                            ioid.is_state_and(|nid| {
+                                self.mutual_arity(id, nid).unwrap() > 0
+                            })
+                        })
+                        .unwrap()
+                        .id();
+                    self.remove_wires(id, bell_other, None).unwrap();
+                }
+                self.scalar *= std::f64::consts::SQRT_2;
+                Ok(prev)
+            } else {
+                Err(NotIOState(ioid.id()))
+            }
+        } else {
+            Err(MissingQubit(q))
+        }
+    }
+
+    /// Like [`remove_state`][Self::remove_state], but using output qubit
+    /// indices rather than bare node IDs.
+    pub fn remove_state_output(&mut self, q: QubitId) -> GraphResult<ZHNode> {
+        use std::mem::replace;
+        if let Some(ioid) = self.outputs.get_mut(q) {
+            if ioid.is_state() {
+                ioid.make_free();
+                let id = ioid.id();
+                let prev =
+                    replace(self.get_node_mut(id).unwrap(), ZHNode::Output);
+                // the state node could be part of a Bell pair -- note that
+                // states are guaranteed not part of multiple Bell pairs
+                let arity = self.arity(id).unwrap();
+                if arity == 2 {
+                    let bell_other =
+                        self.outputs.iter()
+                        .find(|ioid| {
+                            ioid.is_state_and(|nid| {
+                                self.mutual_arity(id, nid).unwrap() > 0
+                            })
+                        })
+                        .unwrap()
+                        .id();
+                    self.remove_wires(id, bell_other, None).unwrap();
+                }
+                self.scalar *= std::f64::consts::SQRT_2;
+                Ok(prev)
+            } else {
+                Err(NotIOState(ioid.id()))
+            }
+        } else {
+            Err(MissingQubit(q))
+        }
     }
 
     // BFS explore from a given starting queue, accumulating a list of tensor
