@@ -71,6 +71,10 @@ impl From<Phase> for f64 {
     }
 }
 
+impl From<Phase> for C64 {
+    fn from(ph: Phase) -> Self { ph.cis() }
+}
+
 impl PartialEq for Phase {
     fn eq(&self, other: &Self) -> bool {
         rempos(self.0 - other.0, R64::one()) == R64::zero()
@@ -369,5 +373,4 @@ mod test {
         assert_eq!(Phase::new(1, 3) / (1.0 / 3.0), Phase::zero());
     }
 }
-
 

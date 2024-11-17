@@ -11,6 +11,10 @@ use crate::{
 };
 
 /// A real phase, constrained to positive multiples of *π*/4, modulo 2*π*.
+///
+/// Conversions from an integer value `n` construct the value `T{m}`, where `m`
+/// is the non-negative reduction of `n` modulo 8. Divisions by integer values
+/// round down.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TPhase {
     /// 0
@@ -43,6 +47,21 @@ impl From<TPhase> for Phase {
     }
 }
 
+impl From<TPhase> for f64 {
+    fn from(tph: TPhase) -> Self {
+        match tph {
+            TPhase::T0 => 0.0,
+            TPhase::T1 => std::f64::consts::FRAC_PI_4,
+            TPhase::T2 => std::f64::consts::FRAC_PI_2,
+            TPhase::T3 => 3.0 * std::f64::consts::FRAC_PI_4,
+            TPhase::T4 => std::f64::consts::PI,
+            TPhase::T5 => 5.0 * std::f64::consts::FRAC_PI_4,
+            TPhase::T6 => 3.0 * std::f64::consts::FRAC_PI_2,
+            TPhase::T7 => 7.0 * std::f64::consts::FRAC_PI_4,
+        }
+    }
+}
+
 impl From<TPhase> for Complex {
     fn from(tph: TPhase) -> Self {
         match tph {
@@ -54,6 +73,22 @@ impl From<TPhase> for Complex {
             TPhase::T5 => Self { div2: 0, re:  0, im:  0, ph_pos: -1, ph_neg:  0 },
             TPhase::T6 => Self { div2: 0, re:  0, im: -1, ph_pos:  0, ph_neg:  0 },
             TPhase::T7 => Self { div2: 0, re:  0, im:  0, ph_pos:  0, ph_neg:  1 },
+        }
+    }
+}
+
+impl From<TPhase> for C64 {
+    fn from(tph: TPhase) -> Self {
+        use std::f64::consts::FRAC_1_SQRT_2 as ONRT2;
+        match tph {
+            TPhase::T0 => Self { re:  1.0,   im:  0.0   },
+            TPhase::T1 => Self { re:  ONRT2, im:  ONRT2 },
+            TPhase::T2 => Self { re:  0.0,   im:  1.0   },
+            TPhase::T3 => Self { re: -ONRT2, im:  ONRT2 },
+            TPhase::T4 => Self { re: -1.0,   im:  0.0   },
+            TPhase::T5 => Self { re: -ONRT2, im: -ONRT2 },
+            TPhase::T6 => Self { re:  0.0,   im: -1.0   },
+            TPhase::T7 => Self { re:  ONRT2, im: -ONRT2 },
         }
     }
 }
@@ -91,6 +126,9 @@ impl_tphase_from_int!(i128);
 impl_tphase_from_int!(isize);
 
 impl TPhase {
+    /// Convert to a floating-point number.
+    pub fn into_float(self) -> f64 { self.into() }
+
     /// Convert to a complex number with modulus 1 and argument equal to `self`.
     pub fn cis(self) -> C64 { Phase::from(self).cis() }
 
@@ -209,6 +247,4 @@ impl_muldiv_int!(i32);
 impl_muldiv_int!(i64);
 impl_muldiv_int!(i128);
 impl_muldiv_int!(isize);
-
-
 

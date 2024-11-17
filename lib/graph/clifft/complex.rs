@@ -669,6 +669,8 @@ impl One for Complex {
 }
 
 impl ComplexRing for Complex {
+    const FRAC_1_SQRT_2: Self = Self::FRAC_1_SQRT_2;
+
     fn conj(mut self) -> Self {
         self.im = -self.im;
         std::mem::swap(&mut self.ph_pos, &mut self.ph_neg);
