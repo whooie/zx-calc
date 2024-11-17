@@ -9,7 +9,7 @@ use super::*;
 ///
 /// ![state_copy][state_copy]
 #[embed_doc_image::embed_doc_image("state_copy", "assets/rules/StateCopy.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StateCopyAll;
 
 /// A unary spider with phase π or 0 connected to an oppositely colored spider.

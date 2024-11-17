@@ -8,7 +8,7 @@ use super::*;
 ///
 /// ![h_state_copy][h_state_copy]
 #[embed_doc_image::embed_doc_image("h_state_copy", "assets/rules/HStateCopy.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HStateCopy;
 
 /// Output of [`HStateCopy::find`].

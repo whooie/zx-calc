@@ -6,7 +6,7 @@ use super::*;
 ///
 /// ![h_euler][h_euler]
 #[embed_doc_image::embed_doc_image("h_euler", "assets/rules/HEuler.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HEuler;
 
 /// Output of [`HEuler::find`].

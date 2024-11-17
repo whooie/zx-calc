@@ -7,7 +7,7 @@ use super::*;
 ///
 /// ![h_state_mul][h_state_mul]
 #[embed_doc_image::embed_doc_image("h_state_mul", "assets/rules/HStateMul.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HStateMul;
 
 /// Output of [`HStateMul::find`].

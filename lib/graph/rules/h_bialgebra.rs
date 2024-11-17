@@ -12,7 +12,7 @@ use super::*;
 ///
 /// ![h_bialgebra][h_bialgebra]
 #[embed_doc_image::embed_doc_image("h_bialgebra", "assets/rules/HBialgebra.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HBialgebra;
 
 /// Output of [`HBialgebra::find`].

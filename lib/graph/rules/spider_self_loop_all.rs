@@ -7,7 +7,7 @@ use super::*;
 ///
 /// ![spider_self_loop][spider_self_loop]
 #[embed_doc_image::embed_doc_image("spider_self_loop", "assets/rules/SpiderSelfLoop.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SpiderSelfLoopAll;
 
 /// Output of [`SpiderSelfLoopAll::find`].

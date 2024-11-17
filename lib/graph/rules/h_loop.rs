@@ -6,7 +6,7 @@ use super::*;
 ///
 /// ![h_loop][h_loop]
 #[embed_doc_image::embed_doc_image("h_loop", "assets/rules/HLoop.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HLoop;
 
 /// Output of [`HLoop::find`].

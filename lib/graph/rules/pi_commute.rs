@@ -9,7 +9,7 @@ use super::*;
 ///
 /// ![pi_commute][pi_commute]
 #[embed_doc_image::embed_doc_image("pi_commute", "assets/rules/PiCommute.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PiCommute;
 
 /// Output of [`PiCommute::find`].

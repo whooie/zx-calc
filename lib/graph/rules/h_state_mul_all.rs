@@ -10,7 +10,7 @@ use super::*;
 ///
 /// ![h_state_mul][h_state_mul]
 #[embed_doc_image::embed_doc_image("h_state_mul", "assets/rules/HStateMul.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HStateMulAll;
 
 /// A Z-spider and a group of attached unary H-boxes.

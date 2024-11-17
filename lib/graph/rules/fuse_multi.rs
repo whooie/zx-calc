@@ -10,7 +10,7 @@ use super::*;
 ///
 /// ![fuse][fuse]
 #[embed_doc_image::embed_doc_image("fuse", "assets/rules/Fuse.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FuseMulti;
 
 /// Output of [`FuseMulti::find`].

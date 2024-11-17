@@ -6,7 +6,7 @@ use super::*;
 ///
 /// ![h_intro][h_intro]
 #[embed_doc_image::embed_doc_image("h_intro", "assets/rules/HIntro.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HIntro;
 
 /// Output of [`HIntro::find`].

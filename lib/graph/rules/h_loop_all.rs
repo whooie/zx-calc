@@ -9,7 +9,7 @@ use super::*;
 ///
 /// ![h_loop][h_loop]
 #[embed_doc_image::embed_doc_image("h_loop", "assets/rules/HLoop.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HLoopAll;
 
 /// A spider and all Hadamard wires connecting it to itself.

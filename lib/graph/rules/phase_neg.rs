@@ -6,7 +6,7 @@ use super::*;
 ///
 /// ![phase_neg][phase_neg]
 #[embed_doc_image::embed_doc_image("phase_neg", "assets/rules/PhaseNeg.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PhaseNeg;
 
 /// Output of [`PhaseNeg::find`].

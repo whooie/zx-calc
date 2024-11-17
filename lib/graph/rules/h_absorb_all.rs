@@ -9,7 +9,7 @@ use super::*;
 ///
 /// ![h_absorb][h_absorb]
 #[embed_doc_image::embed_doc_image("h_absorb", "assets/rules/HAbsorb.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HAbsorbAll;
 
 /// Output of [`HAbsorbAll::find`].

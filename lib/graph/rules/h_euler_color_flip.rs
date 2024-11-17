@@ -7,7 +7,7 @@ use super::*;
 ///
 /// ![h_euler_color_flip][h_euler_color_flip]
 #[embed_doc_image::embed_doc_image("h_euler_color_flip", "assets/rules/HEulerColorFlip.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HEulerColorFlip;
 
 /// Output of [`HEulerColorFlip::find`].

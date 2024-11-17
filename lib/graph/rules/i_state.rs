@@ -10,7 +10,7 @@ use super::*;
 ///
 /// ![i_state][i_state]
 #[embed_doc_image::embed_doc_image("i_state", "assets/rules/IState.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IState;
 
 /// Output of [`IState::find`].

@@ -6,7 +6,7 @@ use super::*;
 ///
 /// ![h_explode][h_explode]
 #[embed_doc_image::embed_doc_image("h_explode", "assets/rules/HExplode.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HExplode;
 
 /// Output of [`HExplode::find`].

@@ -6,7 +6,7 @@ use super::*;
 ///
 /// ![h_state][h_state]
 #[embed_doc_image::embed_doc_image("h_state", "assets/rules/HState.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HState;
 
 /// Output of [`HState::find`].

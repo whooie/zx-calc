@@ -11,6 +11,9 @@
 //! of 1/√2 when they are binary with argument –1 so that they coincide with the
 //! usual definition of the Hadamard gate.
 //!
+//! See [`SimplifyZX`], [`SimplifyZH`], and [`SimplifyCT`] for master lists of
+//! applicable rewrite rules.
+//!
 //! # Example
 //!
 //! TODO
@@ -21,7 +24,6 @@ pub(crate) use crate::graph::{
     ZH, ZHNode,
     CT, CTNode, CTWire,
 };
-
 
 /// A trait for types that can explore a [`Diagram`] and find a particular
 /// structure to simplify.
@@ -161,6 +163,375 @@ mod state_copy;
 pub use state_copy::*;
 mod state_copy_all;
 pub use state_copy_all::*;
+
+/// Master list of rules applicable to [`Diagram`]`<`[`ZX`]`>`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SimplifyZX {
+    Bialgebra,
+    ColorFlip,
+    ColorFlipAll,
+    Fuse,
+    FuseAll,
+    FuseMulti,
+    H2Hopf,
+    HEuler,
+    HEulerColorFlip,
+    HLoop,
+    HLoopAll,
+    HMove,
+    Hopf,
+    IState,
+    IStateAll,
+    Identity,
+    IdentityAll,
+    PhaseNeg,
+    PhaseNegAll,
+    PiCommute,
+    ScalarPair,
+    ScalarPairAll,
+    SpiderSelfLoop,
+    SpiderSelfLoopAll,
+    StateCopy,
+    StateCopyAll,
+}
+
+/// Output of [`SimplifyZX::find`].
+#[derive(Debug)]
+pub enum SimplifyZXData<'a> {
+    BialgebraData(BialgebraData<'a, ZX>),
+    ColorFlipData(ColorFlipData<'a, ZX>),
+    ColorFlipAllData(ColorFlipAllData<'a, ZX>),
+    FuseData(FuseData<'a, ZX>),
+    FuseAllData(FuseAllData<'a, ZX>),
+    FuseMultiData(FuseMultiData<'a, ZX>),
+    H2HopfData(H2HopfData<'a, ZX>),
+    HEulerData(HEulerData<'a, ZX>),
+    HEulerColorFlipData(HEulerColorFlipData<'a, ZX>),
+    HLoopData(HLoopData<'a, ZX>),
+    HLoopAllData(HLoopAllData<'a, ZX>),
+    HMoveData(HMoveData<'a, ZX>),
+    HopfData(HopfData<'a, ZX>),
+    IStateData(IStateData<'a, ZX>),
+    IStateAllData(IStateAllData<'a, ZX>),
+    IdentityData(IdentityData<'a, ZX>),
+    IdentityAllData(IdentityAllData<'a, ZX>),
+    PhaseNegData(PhaseNegData<'a, ZX>),
+    PhaseNegAllData(PhaseNegAllData<'a, ZX>),
+    PiCommuteData(PiCommuteData<'a, ZX>),
+    ScalarPairData(ScalarPairData<'a, ZX>),
+    ScalarPairAllData(ScalarPairAllData<'a, ZX>),
+    SpiderSelfLoopData(SpiderSelfLoopData<'a, ZX>),
+    SpiderSelfLoopAllData(SpiderSelfLoopAllData<'a, ZX>),
+    StateCopyData(StateCopyData<'a, ZX>),
+    StateCopyAllData(StateCopyAllData<'a, ZX>),
+}
+
+impl RuleFinder<ZX> for SimplifyZX {
+    type Output<'a> = SimplifyZXData<'a>;
+
+    fn find(self, dg: &mut Diagram<ZX>) -> Option<Self::Output<'_>> {
+        use SimplifyZXData::*;
+        match self {
+            Self::Bialgebra => Bialgebra.find(dg).map(BialgebraData),
+            Self::ColorFlip => ColorFlip.find(dg).map(ColorFlipData),
+            Self::ColorFlipAll => ColorFlipAll.find(dg).map(ColorFlipAllData),
+            Self::Fuse => Fuse.find(dg).map(FuseData),
+            Self::FuseAll => FuseAll.find(dg).map(FuseAllData),
+            Self::FuseMulti => FuseMulti.find(dg).map(FuseMultiData),
+            Self::H2Hopf => H2Hopf.find(dg).map(H2HopfData),
+            Self::HEuler => HEuler.find(dg).map(HEulerData),
+            Self::HEulerColorFlip => HEulerColorFlip.find(dg).map(HEulerColorFlipData),
+            Self::HLoop => HLoop.find(dg).map(HLoopData),
+            Self::HLoopAll => HLoopAll.find(dg).map(HLoopAllData),
+            Self::HMove => HMove.find(dg).map(HMoveData),
+            Self::Hopf => Hopf.find(dg).map(HopfData),
+            Self::IState => IState.find(dg).map(IStateData),
+            Self::IStateAll => IStateAll.find(dg).map(IStateAllData),
+            Self::Identity => Identity.find(dg).map(IdentityData),
+            Self::IdentityAll => IdentityAll.find(dg).map(IdentityAllData),
+            Self::PhaseNeg => PhaseNeg.find(dg).map(PhaseNegData),
+            Self::PhaseNegAll => PhaseNegAll.find(dg).map(PhaseNegAllData),
+            Self::PiCommute => PiCommute.find(dg).map(PiCommuteData),
+            Self::ScalarPair => ScalarPair.find(dg).map(ScalarPairData),
+            Self::ScalarPairAll => ScalarPairAll.find(dg).map(ScalarPairAllData),
+            Self::SpiderSelfLoop => SpiderSelfLoop.find(dg).map(SpiderSelfLoopData),
+            Self::SpiderSelfLoopAll => SpiderSelfLoopAll.find(dg).map(SpiderSelfLoopAllData),
+            Self::StateCopy => StateCopy.find(dg).map(StateCopyData),
+            Self::StateCopyAll => StateCopyAll.find(dg).map(StateCopyAllData),
+        }
+    }
+}
+
+impl<'a> Rule<ZX> for SimplifyZXData<'a> {
+    fn simplify(self) {
+        match self {
+            Self::BialgebraData(data) => data.simplify(),
+            Self::ColorFlipData(data) => data.simplify(),
+            Self::ColorFlipAllData(data) => data.simplify(),
+            Self::FuseData(data) => data.simplify(),
+            Self::FuseAllData(data) => data.simplify(),
+            Self::FuseMultiData(data) => data.simplify(),
+            Self::H2HopfData(data) => data.simplify(),
+            Self::HEulerData(data) => data.simplify(),
+            Self::HEulerColorFlipData(data) => data.simplify(),
+            Self::HLoopData(data) => data.simplify(),
+            Self::HLoopAllData(data) => data.simplify(),
+            Self::HMoveData(data) => data.simplify(),
+            Self::HopfData(data) => data.simplify(),
+            Self::IStateData(data) => data.simplify(),
+            Self::IStateAllData(data) => data.simplify(),
+            Self::IdentityData(data) => data.simplify(),
+            Self::IdentityAllData(data) => data.simplify(),
+            Self::PhaseNegData(data) => data.simplify(),
+            Self::PhaseNegAllData(data) => data.simplify(),
+            Self::PiCommuteData(data) => data.simplify(),
+            Self::ScalarPairData(data) => data.simplify(),
+            Self::ScalarPairAllData(data) => data.simplify(),
+            Self::SpiderSelfLoopData(data) => data.simplify(),
+            Self::SpiderSelfLoopAllData(data) => data.simplify(),
+            Self::StateCopyData(data) => data.simplify(),
+            Self::StateCopyAllData(data) => data.simplify(),
+        }
+    }
+}
+
+/// Master list of rules applicable to [`Diagram`]`<`[`ZH`]`>`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SimplifyZH {
+    Bialgebra,
+    ColorFlip,
+    ColorFlipAll,
+    Fuse,
+    FuseAll,
+    FuseMulti,
+    H2Hopf,
+    HEuler,
+    HEulerColorFlip,
+    HLoop,
+    HLoopAll,
+    HMove,
+    Hopf,
+    IState,
+    IStateAll,
+    Identity,
+    IdentityAll,
+    PhaseNeg,
+    PhaseNegAll,
+    PiCommute,
+    ScalarPair,
+    ScalarPairAll,
+    SpiderSelfLoop,
+    SpiderSelfLoopAll,
+    StateCopy,
+    StateCopyAll,
+    HAbsorb,
+    HAbsorbAll,
+    HAvg,
+    HBialgebra,
+    HExplode,
+    HExplodeAll,
+    HFuse,
+    HHopf,
+    HIntro,
+    HMultiState,
+    HMultiStateAll,
+    HSelfLoop,
+    HSelfLoopAll,
+    HState,
+    HStateAll,
+    HStateCopy,
+    HStateCopyAll,
+    HStateMul,
+    HStateMulAll,
+}
+
+/// Output of [`SimplifyZH::find`].
+#[derive(Debug)]
+pub enum SimplifyZHData<'a> {
+    BialgebraData(BialgebraData<'a, ZH>),
+    ColorFlipData(ColorFlipData<'a, ZH>),
+    ColorFlipAllData(ColorFlipAllData<'a, ZH>),
+    FuseData(FuseData<'a, ZH>),
+    FuseAllData(FuseAllData<'a, ZH>),
+    FuseMultiData(FuseMultiData<'a, ZH>),
+    H2HopfData(H2HopfData<'a, ZH>),
+    HEulerData(HEulerData<'a, ZH>),
+    HEulerColorFlipData(HEulerColorFlipData<'a, ZH>),
+    HLoopData(HLoopData<'a, ZH>),
+    HLoopAllData(HLoopAllData<'a, ZH>),
+    HMoveData(HMoveData<'a, ZH>),
+    HopfData(HopfData<'a, ZH>),
+    IStateData(IStateData<'a, ZH>),
+    IStateAllData(IStateAllData<'a, ZH>),
+    IdentityData(IdentityData<'a, ZH>),
+    IdentityAllData(IdentityAllData<'a, ZH>),
+    PhaseNegData(PhaseNegData<'a, ZH>),
+    PhaseNegAllData(PhaseNegAllData<'a, ZH>),
+    PiCommuteData(PiCommuteData<'a, ZH>),
+    ScalarPairData(ScalarPairData<'a, ZH>),
+    ScalarPairAllData(ScalarPairAllData<'a, ZH>),
+    SpiderSelfLoopData(SpiderSelfLoopData<'a, ZH>),
+    SpiderSelfLoopAllData(SpiderSelfLoopAllData<'a, ZH>),
+    StateCopyData(StateCopyData<'a, ZH>),
+    StateCopyAllData(StateCopyAllData<'a, ZH>),
+    HAbsorbData(HAbsorbData<'a, ZH>),
+    HAbsorbAllData(HAbsorbAllData<'a, ZH>),
+    HAvgData(HAvgData<'a, ZH>),
+    HBialgebraData(HBialgebraData<'a, ZH>),
+    HExplodeData(HExplodeData<'a, ZH>),
+    HExplodeAllData(HExplodeAllData<'a, ZH>),
+    HFuseData(HFuseData<'a, ZH>),
+    HHopfData(HHopfData<'a, ZH>),
+    HIntroData(HIntroData<'a, ZH>),
+    HMultiStateData(HMultiStateData<'a, ZH>),
+    HMultiStateAllData(HMultiStateAllData<'a, ZH>),
+    HSelfLoopData(HSelfLoopData<'a, ZH>),
+    HSelfLoopAllData(HSelfLoopAllData<'a, ZH>),
+    HStateData(HStateData<'a, ZH>),
+    HStateAllData(HStateAllData<'a, ZH>),
+    HStateCopyData(HStateCopyData<'a, ZH>),
+    HStateCopyAllData(HStateCopyAllData<'a, ZH>),
+    HStateMulData(HStateMulData<'a, ZH>),
+    HStateMulAllData(HStateMulAllData<'a, ZH>),
+}
+
+impl RuleFinder<ZH> for SimplifyZH {
+    type Output<'a> = SimplifyZHData<'a>;
+
+    fn find(self, dg: &mut Diagram<ZH>) -> Option<Self::Output<'_>> {
+        use SimplifyZHData::*;
+        match self {
+            Self::Bialgebra => Bialgebra.find(dg).map(BialgebraData),
+            Self::ColorFlip => ColorFlip.find(dg).map(ColorFlipData),
+            Self::ColorFlipAll => ColorFlipAll.find(dg).map(ColorFlipAllData),
+            Self::Fuse => Fuse.find(dg).map(FuseData),
+            Self::FuseAll => FuseAll.find(dg).map(FuseAllData),
+            Self::FuseMulti => FuseMulti.find(dg).map(FuseMultiData),
+            Self::H2Hopf => H2Hopf.find(dg).map(H2HopfData),
+            Self::HEuler => HEuler.find(dg).map(HEulerData),
+            Self::HEulerColorFlip => HEulerColorFlip.find(dg).map(HEulerColorFlipData),
+            Self::HLoop => HLoop.find(dg).map(HLoopData),
+            Self::HLoopAll => HLoopAll.find(dg).map(HLoopAllData),
+            Self::HMove => HMove.find(dg).map(HMoveData),
+            Self::Hopf => Hopf.find(dg).map(HopfData),
+            Self::IState => IState.find(dg).map(IStateData),
+            Self::IStateAll => IStateAll.find(dg).map(IStateAllData),
+            Self::Identity => Identity.find(dg).map(IdentityData),
+            Self::IdentityAll => IdentityAll.find(dg).map(IdentityAllData),
+            Self::PhaseNeg => PhaseNeg.find(dg).map(PhaseNegData),
+            Self::PhaseNegAll => PhaseNegAll.find(dg).map(PhaseNegAllData),
+            Self::PiCommute => PiCommute.find(dg).map(PiCommuteData),
+            Self::ScalarPair => ScalarPair.find(dg).map(ScalarPairData),
+            Self::ScalarPairAll => ScalarPairAll.find(dg).map(ScalarPairAllData),
+            Self::SpiderSelfLoop => SpiderSelfLoop.find(dg).map(SpiderSelfLoopData),
+            Self::SpiderSelfLoopAll => SpiderSelfLoopAll.find(dg).map(SpiderSelfLoopAllData),
+            Self::StateCopy => StateCopy.find(dg).map(StateCopyData),
+            Self::StateCopyAll => StateCopyAll.find(dg).map(StateCopyAllData),
+            Self::HAbsorb => HAbsorb.find(dg).map(HAbsorbData),
+            Self::HAbsorbAll => HAbsorbAll.find(dg).map(HAbsorbAllData),
+            Self::HAvg => HAvg.find(dg).map(HAvgData),
+            Self::HBialgebra => HBialgebra.find(dg).map(HBialgebraData),
+            Self::HExplode => HExplode.find(dg).map(HExplodeData),
+            Self::HExplodeAll => HExplodeAll.find(dg).map(HExplodeAllData),
+            Self::HFuse => HFuse.find(dg).map(HFuseData),
+            Self::HHopf => HHopf.find(dg).map(HHopfData),
+            Self::HIntro => HIntro.find(dg).map(HIntroData),
+            Self::HMultiState => HMultiState.find(dg).map(HMultiStateData),
+            Self::HMultiStateAll => HMultiStateAll.find(dg).map(HMultiStateAllData),
+            Self::HSelfLoop => HSelfLoop.find(dg).map(HSelfLoopData),
+            Self::HSelfLoopAll => HSelfLoopAll.find(dg).map(HSelfLoopAllData),
+            Self::HState => HState.find(dg).map(HStateData),
+            Self::HStateAll => HStateAll.find(dg).map(HStateAllData),
+            Self::HStateCopy => HStateCopy.find(dg).map(HStateCopyData),
+            Self::HStateCopyAll => HStateCopyAll.find(dg).map(HStateCopyAllData),
+            Self::HStateMul => HStateMul.find(dg).map(HStateMulData),
+            Self::HStateMulAll => HStateMulAll.find(dg).map(HStateMulAllData),
+        }
+    }
+}
+
+impl<'a> Rule<ZH> for SimplifyZHData<'a> {
+    fn simplify(self) {
+        match self {
+            Self::BialgebraData(data) => data.simplify(),
+            Self::ColorFlipData(data) => data.simplify(),
+            Self::ColorFlipAllData(data) => data.simplify(),
+            Self::FuseData(data) => data.simplify(),
+            Self::FuseAllData(data) => data.simplify(),
+            Self::FuseMultiData(data) => data.simplify(),
+            Self::H2HopfData(data) => data.simplify(),
+            Self::HEulerData(data) => data.simplify(),
+            Self::HEulerColorFlipData(data) => data.simplify(),
+            Self::HLoopData(data) => data.simplify(),
+            Self::HLoopAllData(data) => data.simplify(),
+            Self::HMoveData(data) => data.simplify(),
+            Self::HopfData(data) => data.simplify(),
+            Self::IStateData(data) => data.simplify(),
+            Self::IStateAllData(data) => data.simplify(),
+            Self::IdentityData(data) => data.simplify(),
+            Self::IdentityAllData(data) => data.simplify(),
+            Self::PhaseNegData(data) => data.simplify(),
+            Self::PhaseNegAllData(data) => data.simplify(),
+            Self::PiCommuteData(data) => data.simplify(),
+            Self::ScalarPairData(data) => data.simplify(),
+            Self::ScalarPairAllData(data) => data.simplify(),
+            Self::SpiderSelfLoopData(data) => data.simplify(),
+            Self::SpiderSelfLoopAllData(data) => data.simplify(),
+            Self::StateCopyData(data) => data.simplify(),
+            Self::StateCopyAllData(data) => data.simplify(),
+            Self::HAbsorbData(data) => data.simplify(),
+            Self::HAbsorbAllData(data) => data.simplify(),
+            Self::HAvgData(data) => data.simplify(),
+            Self::HBialgebraData(data) => data.simplify(),
+            Self::HExplodeData(data) => data.simplify(),
+            Self::HExplodeAllData(data) => data.simplify(),
+            Self::HFuseData(data) => data.simplify(),
+            Self::HHopfData(data) => data.simplify(),
+            Self::HIntroData(data) => data.simplify(),
+            Self::HMultiStateData(data) => data.simplify(),
+            Self::HMultiStateAllData(data) => data.simplify(),
+            Self::HSelfLoopData(data) => data.simplify(),
+            Self::HSelfLoopAllData(data) => data.simplify(),
+            Self::HStateData(data) => data.simplify(),
+            Self::HStateAllData(data) => data.simplify(),
+            Self::HStateCopyData(data) => data.simplify(),
+            Self::HStateCopyAllData(data) => data.simplify(),
+            Self::HStateMulData(data) => data.simplify(),
+            Self::HStateMulAllData(data) => data.simplify(),
+        }
+    }
+}
+
+/// Master list of rules applicable to [`Diagram`]`<`[`CT`]`>`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SimplifyCT {
+}
+
+/// Output of [`SimplifyCT::find`].
+#[derive(Debug)]
+pub enum SimplifyCTData<'a> {
+    PlaceHolder(std::marker::PhantomData<&'a ()>)
+}
+
+#[allow(unused_variables, unused_mut)]
+impl RuleFinder<CT> for SimplifyCT {
+    type Output<'a> = SimplifyCTData<'a>;
+
+    fn find(self, dg: &mut Diagram<CT>) -> Option<Self::Output<'_>> {
+        todo!()
+        // use SimplifyZHData::*;
+        // match self {
+        // }
+    }
+}
+
+impl<'a> Rule<CT> for SimplifyCTData<'a> {
+    fn simplify(self) {
+        todo!()
+        // match self {
+        // }
+    }
+}
 
 impl<A> Diagram<A>
 where A: DiagramData

@@ -4,7 +4,7 @@ use super::*;
 ///
 /// ![h2hopf][h2hopf]
 #[embed_doc_image::embed_doc_image("h2hopf", "assets/rules/H2Hopf.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct H2Hopf;
 
 /// Output of [`H2Hopf::find`].

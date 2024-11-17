@@ -7,7 +7,7 @@ use super::*;
 ///
 /// ![h_avg][h_avg]
 #[embed_doc_image::embed_doc_image("h_avg", "assets/rules/HAvg.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HAvg;
 
 /// Output of [`HAvg::find`].

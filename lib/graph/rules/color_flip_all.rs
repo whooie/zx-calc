@@ -9,7 +9,7 @@ use super::*;
 ///
 /// ![color_flip][color_flip]
 #[embed_doc_image::embed_doc_image("color_flip", "assets/rules/ColorFlip.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ColorFlipAll;
 
 /// A spider surrounded by Hadamard wires.

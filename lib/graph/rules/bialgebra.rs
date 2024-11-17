@@ -8,7 +8,7 @@ use super::*;
 ///
 /// ![bialgebra][bialgebra]
 #[embed_doc_image::embed_doc_image("bialgebra", "assets/rules/Bialgebra.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Bialgebra;
 
 /// Output of [`Bialgebra::find`].

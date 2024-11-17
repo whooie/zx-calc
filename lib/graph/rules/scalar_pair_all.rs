@@ -9,7 +9,7 @@ use super::*;
 ///
 /// ![scalar_pair][scalar_pair]
 #[embed_doc_image::embed_doc_image("scalar_pair", "assets/rules/ScalarPair.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ScalarPairAll;
 
 /// A scalar subdiagram comprising one or two nodes.

@@ -6,7 +6,7 @@ use super::*;
 ///
 /// ![h_hopf][h_hopf]
 #[embed_doc_image::embed_doc_image("h_hopf", "assets/rules/HHopf.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HHopf;
 
 /// Output of [`HHopf::find`].

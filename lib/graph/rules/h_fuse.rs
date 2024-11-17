@@ -5,7 +5,7 @@ use super::*;
 ///
 /// ![h_fuse][h_fuse]
 #[embed_doc_image::embed_doc_image("h_fuse", "assets/rules/HFuse.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HFuse;
 
 /// Output of [`HFuse::find`].

@@ -8,7 +8,7 @@ use super::*;
 ///
 /// ![identity][identity]
 #[embed_doc_image::embed_doc_image("identity", "assets/rules/Identity.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IdentityAll;
 
 /// Output of [`IdentityAll::find`].

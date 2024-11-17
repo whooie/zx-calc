@@ -7,7 +7,7 @@ use super::*;
 ///
 /// ![h_multi_state][h_multi_state]
 #[embed_doc_image::embed_doc_image("h_multi_state", "assets/rules/HMultiState.svg")]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HMultiStateAll;
 
 /// Output of [`HMultiStateAll::find`].
